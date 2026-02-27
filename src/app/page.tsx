@@ -6,16 +6,22 @@ import { api } from "@/lib/api";
 import { startSignalR } from "@/lib/signalr";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
-import { Search, X, Eye, Users, Car, FileText, RefreshCcw } from "lucide-react";
+import {
+  Search,
+  X,
+  Eye,
+  Users,
+  Car,
+  FileText,
+  RefreshCcw,
+  Send,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import jalaliday from "jalaliday";
 
 dayjs.extend(jalaliday);
 
-// ─────────────────────────────────────────────
-// Debug Logger
-// ─────────────────────────────────────────────
 const log = (...args: any[]) => console.log("🔍 [CarAds]", ...args);
 const logWarn = (...args: any[]) => console.warn("⚠️ [CarAds]", ...args);
 const logError = (...args: any[]) => console.error("❌ [CarAds]", ...args);
@@ -41,6 +47,20 @@ type Ad = {
   description?: string;
   viewCount: number;
 };
+
+type TelegramMsg = {
+  id: number;
+  messageId: number;
+  text: string;
+  fromUsername?: string;
+  fromFirstName?: string;
+  receivedAt: string;
+  telegramLink: string;
+};
+
+type ListItem =
+  | { kind: "ad"; data: Ad }
+  | { kind: "telegram"; data: TelegramMsg };
 
 type UserInfo = {
   id: number;
@@ -97,6 +117,13 @@ function priceToText(v: number): string {
   if (million > 0) parts.push(`${toFa(million)} میلیون`);
   if (thousand > 0) parts.push(`${toFa(thousand)} هزار`);
   return parts.length ? parts.join(" و ") + " تومان" : "—";
+}
+
+function formatTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const h = d.getHours().toString().padStart(2, "0");
+  const m = d.getMinutes().toString().padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 // ─────────────────────────────────────────────
@@ -183,7 +210,6 @@ function DescModal({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-
               <div
                 className="rounded-2xl border px-4 py-3"
                 style={{
@@ -203,6 +229,124 @@ function DescModal({
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+// ─────────────────────────────────────────────
+// TelegramRow
+// ─────────────────────────────────────────────
+function TelegramRow({
+  msg,
+  isNew,
+  borderColor,
+  isDark,
+  softGradient,
+}: {
+  msg: TelegramMsg;
+  isNew: boolean;
+  borderColor: string;
+  isDark: boolean;
+  softGradient: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const senderName = msg.fromFirstName || msg.fromUsername || "ناشناس";
+
+  return (
+    <motion.div
+      layout
+      initial={isNew ? { opacity: 0, y: 40 } : { opacity: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12, scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+    >
+      <div
+        className="relative rounded-[14px] border"
+        style={{
+          borderColor: isNew ? "rgba(0,136,204,0.7)" : borderColor,
+          background: isDark
+            ? "linear-gradient(180deg,rgba(0,136,204,0.07),rgba(0,136,204,0.03))"
+            : "linear-gradient(180deg,rgba(0,136,204,0.05),rgba(0,136,204,0.02))",
+          boxShadow: isNew ? "0 0 0 1.5px rgba(0,136,204,0.35)" : "none",
+          transition: "box-shadow 0.12s, border-color 0.12s",
+        }}
+      >
+        <div
+          className="flex items-center px-3 py-2 gap-2"
+          style={{ direction: "rtl", minWidth: 0 }}
+        >
+          {/* آیکون تلگرام */}
+          <div
+            className="shrink-0 h-7 w-7 rounded-xl grid place-items-center"
+            style={{
+              background: "rgba(0,136,204,0.15)",
+              border: "1px solid rgba(0,136,204,0.3)",
+            }}
+          >
+            <Send className="h-3.5 w-3.5" style={{ color: "rgb(0,136,204)" }} />
+          </div>
+
+          {/* فرستنده */}
+          <span
+            className="text-[11px] font-bold px-2 py-0.5 rounded-xl border whitespace-nowrap shrink-0"
+            style={{
+              borderColor: "rgba(0,136,204,0.4)",
+              background: "rgba(0,136,204,0.1)",
+              color: "rgb(0,136,204)",
+            }}
+          >
+            {senderName}
+          </span>
+
+          {/* جداکننده */}
+          <div
+            className="shrink-0 h-4 w-px opacity-20"
+            style={{ background: "currentColor" }}
+          />
+
+          {/* متن پیام */}
+          <span
+            className="flex-1 text-sm text-foreground truncate leading-tight min-w-0"
+            dir="rtl"
+          >
+            {msg.text}
+          </span>
+
+          {/* ساعت */}
+          <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+            {formatTime(msg.receivedAt)}
+          </span>
+
+          {/* دکمه باز کردن در تلگرام */}
+          <a
+            href={msg.telegramLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            title="مشاهده در تلگرام"
+            className="h-8 w-8 rounded-xl border grid place-items-center select-none outline-none shrink-0"
+            style={{
+              borderColor: hovered ? "rgba(0,136,204,0.8)" : borderColor,
+              background: hovered
+                ? "rgba(0,136,204,0.2)"
+                : isDark
+                ? "hsl(0 0% 12%)"
+                : "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+              transform: hovered ? "translateY(-1px) scale(1.08)" : "none",
+              boxShadow: hovered ? "0 4px 16px rgba(0,136,204,0.3)" : "none",
+              transition: "all 0.18s",
+            }}
+          >
+            <Send
+              className="h-4 w-4"
+              style={{ color: hovered ? "rgb(0,136,204)" : undefined }}
+            />
+          </a>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -478,7 +622,7 @@ function AdRow({
 }
 
 // ─────────────────────────────────────────────
-// EmptyRightPanel — پنل سمت راست (خالی)
+// EmptyRightPanel
 // ─────────────────────────────────────────────
 function EmptyRightPanel({
   borderColor,
@@ -519,7 +663,6 @@ export default function HomePage() {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
 
-  // ✅ جلوگیری از Hydration mismatch بدون به‌هم‌ریختن UI
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
@@ -576,6 +719,8 @@ export default function HomePage() {
   );
 
   const [ads, setAds] = useState<Ad[]>([]);
+  const [telegramMsgs, setTelegramMsgs] = useState<TelegramMsg[]>([]);
+  const [newTelegramIds, setNewTelegramIds] = useState<Set<number>>(new Set());
   const [users, setUsers] = useState<Record<number, UserInfo>>({});
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const [flashCounts, setFlashCounts] = useState<Record<number, number>>({});
@@ -620,32 +765,56 @@ export default function HomePage() {
 
   const loadTodayStats = useCallback(async () => {
     const r = await api.get("/api/ads/stats/today");
-    logOk("Today views:", r.data?.todayViews);
     setTodayViews(r.data?.todayViews ?? 0);
+  }, []);
+
+  const loadTelegramToday = useCallback(async () => {
+    try {
+      const r = await api.get("/api/telegram/today");
+      setTelegramMsgs(r.data ?? []);
+      logOk("Telegram messages loaded:", (r.data ?? []).length);
+    } catch (e: any) {
+      logWarn("Failed to load telegram messages →", e?.message);
+    }
   }, []);
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.allSettled([loadAds(), loadTodayStats()]);
-      logOk("Manual refresh done");
-    } catch (e: any) {
-      logError("Manual refresh failed →", e?.message);
+      await Promise.allSettled([
+        loadAds(),
+        loadTodayStats(),
+        loadTelegramToday(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadAds, loadTodayStats]);
+  }, [loadAds, loadTodayStats, loadTelegramToday]);
 
   useEffect(() => {
-    loadAds().catch((err: any) => {
-      logError("Failed to load ads →", err?.message);
-    });
-    loadTodayStats().catch((err: any) =>
-      logWarn("Failed to load today stats →", err?.message)
+    loadAds().catch((e: any) => logError("Failed to load ads →", e?.message));
+    loadTodayStats().catch((e: any) =>
+      logWarn("Failed to load stats →", e?.message)
     );
-  }, [loadAds, loadTodayStats]);
+    loadTelegramToday();
+  }, [loadAds, loadTodayStats, loadTelegramToday]);
 
-  // ── SignalR (بدون تلگرام) ──
+  // ── ریست پیام‌های تلگرام راس ۱۲ شب ──
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const msToMidnight = midnight.getTime() - now.getTime();
+
+    const t = setTimeout(() => {
+      setTelegramMsgs([]);
+      logOk("Telegram messages cleared at midnight");
+    }, msToMidnight);
+
+    return () => clearTimeout(t);
+  }, []);
+
+  // ── SignalR ──
   useEffect(() => {
     let unsub: (() => void) | null = null;
 
@@ -658,8 +827,30 @@ export default function HomePage() {
         conn.on("OnlineCount", onOnlineCount);
         await conn.invoke("GetOnlineCount");
 
+        // ✅ دریافت پیام تلگرام real-time
+        const onTelegramMsg = (msg: TelegramMsg) => {
+          logOk("New Telegram message:", msg.text.substring(0, 30));
+          setTelegramMsgs((prev) => {
+            const exists = prev.some((m) => m.id === msg.id);
+            if (exists) return prev;
+            return [msg, ...prev];
+          });
+          setNewTelegramIds((prev) => new Set([...prev, msg.id]));
+          setTimeout(() => {
+            setNewTelegramIds((prev) => {
+              const next = new Set(prev);
+              next.delete(msg.id);
+              return next;
+            });
+          }, 3000);
+        };
+
+        conn.off("TelegramMessageReceived");
+        conn.on("TelegramMessageReceived", onTelegramMsg);
+
         unsub = () => {
           conn.off("OnlineCount", onOnlineCount);
+          conn.off("TelegramMessageReceived", onTelegramMsg);
         };
       } catch (err: any) {
         logError("SignalR failed →", err?.message);
@@ -673,22 +864,12 @@ export default function HomePage() {
 
   const handleViewClick = useCallback(
     async (ad: Ad) => {
-      log("View click → ad id:", ad.id, "title:", ad.title);
-      setFlashCounts((prev) => ({
-        ...prev,
-        [ad.id]: (prev[ad.id] ?? 0) + 1,
-      }));
+      setFlashCounts((prev) => ({ ...prev, [ad.id]: (prev[ad.id] ?? 0) + 1 }));
       try {
         const res = await api.post(`/api/ads/${ad.id}/view`);
         const newCount = res.data?.viewCount ?? Number(ad.viewCount) + 1;
-        logOk("View registered. viewCount:", newCount);
         setAds((prev) =>
           prev.map((x) => (x.id === ad.id ? { ...x, viewCount: newCount } : x))
-        );
-        window.dispatchEvent(
-          new CustomEvent("carads_view_updated", {
-            detail: { adId: ad.id, viewCount: newCount },
-          })
         );
       } catch (e: any) {
         logError("View API error →", e?.message);
@@ -699,18 +880,41 @@ export default function HomePage() {
     [router]
   );
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return ads;
-    const q = search.trim().toLowerCase();
-    return ads.filter(
-      (a) =>
-        a.title.toLowerCase().includes(q) ||
-        a.color.toLowerCase().includes(q) ||
-        String(a.year).includes(q) ||
-        typeLabel(a.type).includes(q) ||
-        priceToText(a.price).includes(q)
-    );
-  }, [ads, search]);
+  // ── لیست ترکیبی (آگهی + تلگرام) ──
+  const combinedItems = useMemo((): ListItem[] => {
+    let filteredAds = ads;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      filteredAds = ads.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.color.toLowerCase().includes(q) ||
+          String(a.year).includes(q) ||
+          typeLabel(a.type).includes(q) ||
+          priceToText(a.price).includes(q)
+      );
+    }
+
+    const adItems: ListItem[] = filteredAds.map((a) => ({
+      kind: "ad",
+      data: a,
+    }));
+    const tgItems: ListItem[] = telegramMsgs.map((m) => ({
+      kind: "telegram",
+      data: m,
+    }));
+
+    // ترکیب و مرتب‌سازی بر اساس زمان (جدیدترین اول)
+    const all = [...adItems, ...tgItems].sort((a, b) => {
+      const getTime = (item: ListItem) => {
+        if (item.kind === "ad") return new Date(item.data.createdAt).getTime();
+        return new Date(item.data.receivedAt).getTime();
+      };
+      return getTime(b) - getTime(a);
+    });
+
+    return all;
+  }, [ads, telegramMsgs, search]);
 
   useEffect(() => {
     if (selectedAd) {
@@ -719,8 +923,6 @@ export default function HomePage() {
     }
   }, [ads, selectedAd]);
 
-  // ✅ اگر هنوز mounted نشده، فقط برای جلوگیری از mismatch:
-  // UI از بین نمی‌ره؛ فقط یک فریم اول ثابت می‌مونه.
   if (!mounted) {
     return (
       <>
@@ -741,6 +943,9 @@ export default function HomePage() {
       </>
     );
   }
+
+  const adCount = combinedItems.filter((i) => i.kind === "ad").length;
+  const tgCount = combinedItems.filter((i) => i.kind === "telegram").length;
 
   return (
     <>
@@ -785,7 +990,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={refreshAll}
-                title="رفرش لیست‌ها"
+                title="رفرش"
                 className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70 hover:opacity-100 transition-opacity"
                 disabled={refreshing}
               >
@@ -840,39 +1045,54 @@ export default function HomePage() {
               style={{ scrollbarWidth: "thin" }}
             >
               <div className="space-y-1">
-                {filtered.length === 0 ? (
+                {combinedItems.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40 py-20">
                     <Car className="h-8 w-8" />
                     <div className="text-sm font-semibold">موردی یافت نشد</div>
                   </div>
                 ) : (
                   <AnimatePresence initial={false} mode="popLayout">
-                    {filtered.map((ad) => (
-                      <AdRow
-                        key={ad.id}
-                        ad={ad}
-                        userInfo={users[ad.userId]}
-                        isNew={newIds.has(ad.id)}
-                        flashCount={flashCounts[ad.id] ?? 0}
-                        selected={selectedAd?.id === ad.id}
-                        onViewClick={handleViewClick}
-                        onSelect={(a) =>
-                          setSelectedAd((prev) =>
-                            prev?.id === a.id ? null : a
-                          )
-                        }
-                        onDescClick={(a) => {
-                          setDescAd(a);
-                          setDescOpen(true);
-                        }}
-                        softGradient={softGradient}
-                        greenGradient={greenGradient}
-                        borderColor={borderColor}
-                        cardBg={cardBg}
-                        chipBg={chipBg}
-                        isDark={isDark}
-                      />
-                    ))}
+                    {combinedItems.map((item) => {
+                      if (item.kind === "telegram") {
+                        return (
+                          <TelegramRow
+                            key={`tg-${item.data.id}`}
+                            msg={item.data}
+                            isNew={newTelegramIds.has(item.data.id)}
+                            borderColor={borderColor}
+                            isDark={isDark}
+                            softGradient={softGradient}
+                          />
+                        );
+                      }
+                      const ad = item.data;
+                      return (
+                        <AdRow
+                          key={`ad-${ad.id}`}
+                          ad={ad}
+                          userInfo={users[ad.userId]}
+                          isNew={newIds.has(ad.id)}
+                          flashCount={flashCounts[ad.id] ?? 0}
+                          selected={selectedAd?.id === ad.id}
+                          onViewClick={handleViewClick}
+                          onSelect={(a) =>
+                            setSelectedAd((prev) =>
+                              prev?.id === a.id ? null : a
+                            )
+                          }
+                          onDescClick={(a) => {
+                            setDescAd(a);
+                            setDescOpen(true);
+                          }}
+                          softGradient={softGradient}
+                          greenGradient={greenGradient}
+                          borderColor={borderColor}
+                          cardBg={cardBg}
+                          chipBg={chipBg}
+                          isDark={isDark}
+                        />
+                      );
+                    })}
                   </AnimatePresence>
                 )}
               </div>
@@ -883,16 +1103,32 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Footer stats */}
           <div
             className="mt-2 pt-2 flex items-center justify-between gap-3 flex-wrap shrink-0"
             style={{ borderTop: `1px solid hsl(var(--border) / 0.25)` }}
           >
-            <div
-              className="flex items-center gap-2 px-4 py-1.5 rounded-2xl border text-xs font-bold"
-              style={{ borderColor, background: softGradient }}
-            >
-              <Car className="h-3.5 w-3.5" />
-              <span>{filtered.length.toLocaleString("fa-IR")} آگهی فعال</span>
+            <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-2 px-4 py-1.5 rounded-2xl border text-xs font-bold"
+                style={{ borderColor, background: softGradient }}
+              >
+                <Car className="h-3.5 w-3.5" />
+                <span>{adCount.toLocaleString("fa-IR")} آگهی</span>
+              </div>
+              {tgCount > 0 && (
+                <div
+                  className="flex items-center gap-2 px-4 py-1.5 rounded-2xl border text-xs font-bold"
+                  style={{
+                    borderColor: "rgba(0,136,204,0.4)",
+                    background: "rgba(0,136,204,0.12)",
+                    color: "rgb(0,136,204)",
+                  }}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{tgCount.toLocaleString("fa-IR")} پیام تلگرام</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
