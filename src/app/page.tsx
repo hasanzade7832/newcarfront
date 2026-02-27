@@ -27,6 +27,8 @@ const logWarn = (...args: any[]) => console.warn("⚠️ [CarAds]", ...args);
 const logError = (...args: any[]) => console.error("❌ [CarAds]", ...args);
 const logOk = (...args: any[]) => console.log("✅ [CarAds]", ...args);
 
+const TELEGRAM_TAKE = 5000;
+
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -117,6 +119,13 @@ function priceToText(v: number): string {
   if (million > 0) parts.push(`${toFa(million)} میلیون`);
   if (thousand > 0) parts.push(`${toFa(thousand)} هزار`);
   return parts.length ? parts.join(" و ") + " تومان" : "—";
+}
+
+function formatTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const h = d.getHours().toString().padStart(2, "0");
+  const m = d.getMinutes().toString().padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 // ─────────────────────────────────────────────
@@ -226,7 +235,8 @@ function DescModal({
 }
 
 // ─────────────────────────────────────────────
-// TelegramRow (فقط آیکون تلگرام + متن پیام / بدون ساعت / بالا به پایین)
+// TelegramRow (نام فرستنده + متن 2 خط با ... + آیکون تلگرام و ساعت سمت مخالف)
+// پیام‌های جدید از بالا (انیمیشن زیبا)
 // ─────────────────────────────────────────────
 function TelegramRow({
   msg,
@@ -239,13 +249,24 @@ function TelegramRow({
   borderColor: string;
   isDark: boolean;
 }) {
+  const senderName =
+    (msg.fromFirstName && msg.fromFirstName.trim()) ||
+    (msg.fromUsername && msg.fromUsername.trim()) ||
+    "کاربر";
+
+  const time = formatTime(msg.receivedAt);
+
   return (
     <motion.div
       layout
-      initial={isNew ? { opacity: 0, y: 18 } : { opacity: 1, y: 0 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10, scale: 0.98 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      initial={
+        isNew
+          ? { opacity: 0, y: -22, scale: 0.985 }
+          : { opacity: 1, y: 0, scale: 1 }
+      }
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 12, scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 420, damping: 34 }}
     >
       <a
         href={msg.telegramLink}
@@ -257,40 +278,82 @@ function TelegramRow({
         <div
           className="relative rounded-[14px] border"
           style={{
-            borderColor: isNew ? "rgba(0,136,204,0.7)" : borderColor,
+            borderColor: isNew ? "rgba(0,136,204,0.75)" : borderColor,
             background: isDark
-              ? "linear-gradient(180deg,rgba(0,136,204,0.07),rgba(0,136,204,0.03))"
-              : "linear-gradient(180deg,rgba(0,136,204,0.05),rgba(0,136,204,0.02))",
+              ? "linear-gradient(180deg,rgba(0,136,204,0.075),rgba(0,136,204,0.028))"
+              : "linear-gradient(180deg,rgba(0,136,204,0.055),rgba(0,136,204,0.02))",
             boxShadow: isNew ? "0 0 0 1.5px rgba(0,136,204,0.35)" : "none",
-            transition: "box-shadow 0.12s, border-color 0.12s",
+            transition: "box-shadow 0.15s, border-color 0.15s, transform 0.15s",
           }}
         >
           <div
-            className="flex items-center px-3 py-2 gap-2"
-            style={{ direction: "rtl", minWidth: 0 }}
+            className="flex items-center px-3 py-2"
+            style={{ direction: "rtl", gap: 10, minWidth: 0 }}
           >
-            {/* فقط یک آیکون تلگرام */}
-            <div
-              className="shrink-0 h-7 w-7 rounded-xl grid place-items-center"
-              style={{
-                background: "rgba(0,136,204,0.15)",
-                border: "1px solid rgba(0,136,204,0.3)",
-              }}
-            >
-              <Send
-                className="h-3.5 w-3.5"
-                style={{ color: "rgb(0,136,204)" }}
-              />
+            {/* سمت راست: نام فرستنده + متن */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="text-[11px] font-extrabold px-2 py-0.5 rounded-xl border whitespace-nowrap shrink-0"
+                  style={{
+                    borderColor: "rgba(0,136,204,0.42)",
+                    background: "rgba(0,136,204,0.11)",
+                    color: "rgb(0,136,204)",
+                  }}
+                >
+                  {senderName}
+                </span>
+              </div>
+
+              <div
+                className="text-sm text-foreground leading-6"
+                dir="rtl"
+                style={{
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical" as any,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  opacity: 0.95,
+                }}
+              >
+                {msg.text}
+              </div>
             </div>
 
-            {/* متن پیام */}
-            <span
-              className="flex-1 text-sm text-foreground truncate leading-tight min-w-0"
-              dir="rtl"
-            >
-              {msg.text}
-            </span>
+            {/* سمت چپ: ساعت + آیکون تلگرام (مثل جای آیکون ماشین) */}
+            <div className="shrink-0 flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                {time}
+              </span>
+
+              <div
+                className="h-8 w-8 rounded-xl border grid place-items-center select-none outline-none shrink-0"
+                style={{
+                  borderColor: isNew ? "rgba(0,136,204,0.7)" : borderColor,
+                  background: isDark ? "hsl(0 0% 12%)" : "hsl(var(--card))",
+                  boxShadow: isNew ? "0 6px 18px rgba(0,136,204,0.18)" : "none",
+                }}
+              >
+                <Send className="h-4 w-4" style={{ color: "rgb(0,136,204)" }} />
+              </div>
+            </div>
           </div>
+
+          {/* shimmer خیلی ظریف برای پیام جدید */}
+          {isNew && (
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[14px]">
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background:
+                    "linear-gradient(90deg,transparent,rgba(0,136,204,0.10),transparent)",
+                  animation: "tgShimmer 0.9s linear infinite",
+                }}
+              />
+            </div>
+          )}
         </div>
       </a>
     </motion.div>
@@ -715,10 +778,10 @@ export default function HomePage() {
     setTodayViews(r.data?.todayViews ?? 0);
   }, []);
 
-  // ✅ فقط آخرین 1000 پیام
+  // ✅ آخرین 5000 پیام تلگرام (Newest-first)
   const loadTelegramLatest = useCallback(async () => {
     try {
-      const r = await api.get("/api/telegram/latest?take=1000");
+      const r = await api.get(`/api/telegram/latest?take=${TELEGRAM_TAKE}`);
       setTelegramMsgs(r.data ?? []);
       logOk("Telegram latest messages loaded:", (r.data ?? []).length);
     } catch (e: any) {
@@ -760,8 +823,7 @@ export default function HomePage() {
         conn.on("OnlineCount", onOnlineCount);
         await conn.invoke("GetOnlineCount");
 
-        // ✅ دریافت پیام تلگرام real-time
-        // ترتیب نمایش: بالا به پایین (قدیمی → جدید) پس پیام جدید باید بره آخر لیست
+        // ✅ Real-time: پیام جدید باید از بالا بیاد (prepend)
         const onTelegramMsg = (msg: TelegramMsg) => {
           logOk("New Telegram message:", msg.text.substring(0, 30));
 
@@ -769,11 +831,11 @@ export default function HomePage() {
             const exists = prev.some((m) => m.id === msg.id);
             if (exists) return prev;
 
-            const next = [...prev, msg];
+            const next = [msg, ...prev];
 
-            // سقف 1000 پیام (اگر بیشتر شد از اول حذف کن)
-            if (next.length > 1000) {
-              return next.slice(next.length - 1000);
+            // سقف 5000 (برای سبک موندن UI)
+            if (next.length > TELEGRAM_TAKE) {
+              return next.slice(0, TELEGRAM_TAKE);
             }
             return next;
           });
@@ -823,38 +885,53 @@ export default function HomePage() {
     [router]
   );
 
-  // ── لیست ترکیبی (آگهی + تلگرام) ──
-  // پیام‌ها از بالا به پایین: قدیمی → جدید
+  // ── لیست ترکیبی (آگهی + تلگرام) + سرچ برای هر دو
+  // جدیدها بالا (Newest → Oldest)
   const combinedItems = useMemo((): ListItem[] => {
-    let filteredAds = ads;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      filteredAds = ads.filter(
-        (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.color.toLowerCase().includes(q) ||
-          String(a.year).includes(q) ||
-          typeLabel(a.type).includes(q) ||
-          priceToText(a.price).includes(q)
-      );
-    }
+    const q = search.trim().toLowerCase();
+
+    const filteredAds =
+      q.length === 0
+        ? ads
+        : ads.filter((a) => {
+            const txt = [
+              a.title,
+              a.color,
+              String(a.year),
+              typeLabel(a.type),
+              priceToText(a.price),
+            ]
+              .join(" ")
+              .toLowerCase();
+            return txt.includes(q);
+          });
+
+    const filteredTelegram =
+      q.length === 0
+        ? telegramMsgs
+        : telegramMsgs.filter((m) => {
+            const sender = `${m.fromFirstName ?? ""} ${
+              m.fromUsername ?? ""
+            }`.toLowerCase();
+            const txt = `${sender} ${m.text ?? ""}`.toLowerCase();
+            return txt.includes(q);
+          });
 
     const adItems: ListItem[] = filteredAds.map((a) => ({
       kind: "ad",
       data: a,
     }));
-    const tgItems: ListItem[] = telegramMsgs.map((m) => ({
+    const tgItems: ListItem[] = filteredTelegram.map((m) => ({
       kind: "telegram",
       data: m,
     }));
 
-    // ✅ قدیمی → جدید
     const all = [...adItems, ...tgItems].sort((a, b) => {
       const getTime = (item: ListItem) => {
         if (item.kind === "ad") return new Date(item.data.createdAt).getTime();
         return new Date(item.data.receivedAt).getTime();
       };
-      return getTime(a) - getTime(b);
+      return getTime(b) - getTime(a);
     });
 
     return all;
@@ -906,6 +983,10 @@ export default function HomePage() {
           from { transform: translateX(100%); }
           to   { transform: translateX(-100%); }
         }
+        @keyframes tgShimmer {
+          from { transform: translateX(100%); }
+          to { transform: translateX(-100%); }
+        }
       `}</style>
 
       <DescModal
@@ -951,7 +1032,7 @@ export default function HomePage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="جستجو در آگهی‌ها: نام، رنگ، سال، قیمت..."
+                placeholder="جستجو در تلگرام و آگهی‌ها..."
                 className="w-full h-10 rounded-2xl border pr-10 pl-10 text-sm outline-none text-center"
                 style={{
                   borderColor,
