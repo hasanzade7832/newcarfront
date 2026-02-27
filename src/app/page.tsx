@@ -384,9 +384,9 @@ function TelegramRow({
 
             {/* چپ: ساعت + آیکون */}
             <div className="shrink-0 flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+              {/* <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
                 {time}
-              </span>
+              </span> */}
 
               <div
                 className="h-8 w-8 rounded-xl border grid place-items-center select-none outline-none shrink-0"
