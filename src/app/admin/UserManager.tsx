@@ -1,16 +1,13 @@
 "use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-
 import { api } from "@/lib/api";
 import UserModal, { type UserForm } from "@/app/admin/UserModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorToText } from "@/lib/errorText";
-
 import {
   Table,
   TableBody,
@@ -19,7 +16,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
 import { Pencil, Trash2, Search } from "lucide-react";
 
 type AdminUserRow = {
@@ -31,6 +27,9 @@ type AdminUserRow = {
   email: string;
   role: "User" | "Admin" | "SuperAdmin";
   createdAt?: string;
+  city?: string;
+  address?: string; // ✅ تغییر از Address به address
+  showroomName?: string; // ✅ تغییر از ShowroomName به showroomName
 };
 
 function toNum(v: any) {
@@ -48,6 +47,9 @@ function normalizeUser(raw: any): AdminUserRow {
     email: String(raw?.email ?? raw?.Email ?? ""),
     role: (raw?.role ?? raw?.Role ?? "User") as any,
     createdAt: raw?.createdAt ?? raw?.CreatedAt ?? undefined,
+    city: String(raw?.city ?? raw?.City ?? ""),
+    address: String(raw?.address ?? raw?.address ?? ""), // ✅ تغییر از Address به address
+    showroomName: String(raw?.showroomName ?? raw?.showroomName ?? ""), // ✅ تغییر از ShowroomName به showroomName
   };
 }
 
@@ -64,18 +66,13 @@ export default function UserManager({
 }) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-
   const [items, setItems] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // سرچ لحظه‌ای
   const [q, setQ] = useState("");
   const debounceRef = useRef<any>(null);
-
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
 
-  // ✅ گرادیانت هماهنگ با Header (دارک پررنگ‌تر)
   const softGradient = useMemo(() => {
     return isDark
       ? "linear-gradient(90deg, rgba(34,197,94,.62), rgba(56,189,248,.54), rgba(217,70,239,.52))"
@@ -119,7 +116,6 @@ export default function UserManager({
           Admin
         </span>
       );
-
     return (
       <span
         className={`${base}`}
@@ -156,20 +152,16 @@ export default function UserManager({
 
   useEffect(() => {
     load("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ سرچ لحظه‌ای با Debounce
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       load(q);
     }, 350);
-
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   const title = useMemo(() => "مدیریت کاربران (فقط SuperAdmin)", []);
@@ -203,12 +195,10 @@ export default function UserManager({
       });
       return;
     }
-
     const ok = window.confirm(
       `حذف کاربر "${u.firstName} ${u.lastName}" (${u.username}) انجام شود؟`
     );
     if (!ok) return;
-
     toast.loading("در حال حذف کاربر...", { id: "user-del" });
     try {
       await api.delete(`/api/admin/users/${u.id}`);
@@ -223,6 +213,7 @@ export default function UserManager({
   }
 
   async function handleSubmit(payload: UserForm) {
+    console.log("pppppp", payload);
     if (!canManageUsers) {
       toast.error("دسترسی ندارید", {
         description: "فقط SuperAdmin امکان انجام این عملیات را دارد.",
@@ -230,31 +221,36 @@ export default function UserManager({
       return;
     }
 
-    // create
-    if (!editing) {
-      await api.post("/api/admin/users", {
-        FirstName: clean(payload.firstName),
-        LastName: clean(payload.lastName),
-        Username: clean(payload.username),
-        Phone: clean(payload.phone),
-        Email: clean(payload.email),
-        Password: clean(payload.password),
-        Role: payload.role, // "User" | "Admin"
-      });
-      await load(q);
-      return;
-    }
-
-    // edit (UpdateUserDto)
-    await api.put(`/api/admin/users/${editing.id}`, {
+    const commonPayload = {
       FirstName: clean(payload.firstName),
       LastName: clean(payload.lastName),
       Username: clean(payload.username),
       Phone: clean(payload.phone),
       Email: clean(payload.email),
-    });
+      City: clean(payload.city),
+      address: clean(payload.address), // ✅ تغییر از Address به address
+      Role: payload.role,
+    };
 
-    // change role (optional endpoint)
+    if (!editing) {
+      await api.post("/api/admin/users", {
+        ...commonPayload,
+        Password: clean(payload.password),
+      });
+      await load(q);
+      return;
+    }
+
+    const editPayload: any = {
+      ...commonPayload,
+    };
+
+    if (clean(payload.password)) {
+      editPayload.Password = clean(payload.password);
+    }
+
+    await api.put(`/api/admin/users/${editing.id}`, editPayload);
+
     const prevRole = editing.role === "Admin" ? "Admin" : "User";
     const nextRole = payload.role === "Admin" ? "Admin" : "User";
     if (prevRole !== nextRole) {
@@ -273,7 +269,11 @@ export default function UserManager({
         username: editing.username,
         phone: editing.phone,
         email: editing.email,
+        city: editing.city,
+        address: editing.address, // ✅ تغییر از Address به address
+        showroomName: editing.showroomName, // ✅ تغییر از ShowroomName به showroomName
         role: (editing.role === "Admin" ? "Admin" : "User") as any,
+        password: "",
       }
     : undefined;
 
@@ -294,7 +294,6 @@ export default function UserManager({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-base font-semibold text-foreground">{title}</div>
-
         <Button
           onClick={openCreate}
           disabled={!canManageUsers}
@@ -339,14 +338,13 @@ export default function UserManager({
         </div>
       ) : null}
 
-      {/* Search Bar (Live) */}
       <div className="mt-4">
         <div className="relative">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجو: نام، نام‌کاربری، موبایل، ایمیل..."
+            placeholder="جستجو: نام، نام‌کاربری، موبایل، ایمیل، شهر، آدرس..."
             className="rounded-2xl h-12 pr-11"
           />
         </div>
@@ -364,7 +362,6 @@ export default function UserManager({
         canManageUsers={canManageUsers}
       />
 
-      {/* Table */}
       <div
         className="mt-4 rounded-3xl border overflow-hidden"
         style={{ borderColor: "hsl(var(--border))" }}
@@ -380,7 +377,6 @@ export default function UserManager({
               <TableHead className="text-center w-[120px]">عملیات</TableHead>
             </TableRow>
           </TableHeader>
-
           <TableBody>
             {loading ? (
               <TableRow>
@@ -416,26 +412,20 @@ export default function UserManager({
                       {u.firstName} {u.lastName}
                     </motion.div>
                   </TableCell>
-
                   <TableCell className="text-right">
                     <span className="font-mono text-sm">{u.username}</span>
                   </TableCell>
-
                   <TableCell className="text-right">
                     <span className="font-mono text-sm">{u.phone}</span>
                   </TableCell>
-
                   <TableCell className="text-right break-words">
                     {u.email}
                   </TableCell>
-
                   <TableCell className="text-right">
                     {rolePill(u.role)}
                   </TableCell>
-
                   <TableCell className="text-center">
                     <div className="flex items-center justify-center gap-2">
-                      {/* Edit icon (yellow) */}
                       <button
                         type="button"
                         disabled={!canManageUsers}
@@ -458,8 +448,6 @@ export default function UserManager({
                       >
                         <Pencil className="h-4 w-4 text-yellow-600" />
                       </button>
-
-                      {/* Trash icon (red) */}
                       <button
                         type="button"
                         disabled={!canManageUsers}

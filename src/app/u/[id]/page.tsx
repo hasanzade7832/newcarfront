@@ -6,7 +6,6 @@ import { joinProfile, leaveProfile, startSignalR } from "@/lib/signalr";
 import { useAuthStore } from "@/store/auth.store";
 import dayjs from "dayjs";
 import jalaliday from "jalaliday";
-import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -492,7 +491,8 @@ export default function PublicUserPage() {
   const profileId = Number(idStr);
   const highlightAdId = Number(searchParams.get("ad") ?? "0") || null;
 
-  const { userId: meId, role: myRole, token } = useAuthStore();
+  const { userId: meId, token } = useAuthStore();
+  const isOwner = meId === profileId;
 
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -540,8 +540,6 @@ export default function PublicUserPage() {
   const [search, setSearch] = useState("");
   const [detailsAd, setDetailsAd] = useState<Ad | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-
-  const isOwner = meId === profileId;
 
   // ── Load ──
   async function loadAll() {
@@ -747,13 +745,12 @@ export default function PublicUserPage() {
           </div>
         )}
 
-        {/* ✅ Top Card: فقط نام نمایشگاه وسط + سرچ — بدون نام/آیکون کنار */}
+        {/* ✅ Top Card: فقط نام نمایشگاه وسط + سرچ */}
         <section
           className="rounded-3xl border p-4 shrink-0"
           style={{ borderColor, background: sectionBg }}
         >
           <div className="flex flex-col items-center gap-3">
-            {/* ✅ نمایشگاه وسط‌چین + چشمک آرام */}
             <h1
               className="text-xl font-extrabold text-foreground text-center"
               style={{ animation: "titleGlow 3s ease-in-out infinite" }}
@@ -761,7 +758,6 @@ export default function PublicUserPage() {
               نمایشگاه {loading ? "..." : user?.username ?? ""}
             </h1>
 
-            {/* ✅ سرچ وسط‌چین */}
             <div className="w-full max-w-[440px] relative">
               <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <input
@@ -788,28 +784,7 @@ export default function PublicUserPage() {
               )}
             </div>
 
-            {/* دکمه مدیریت — فقط صاحب */}
-            {isOwner && (
-              <div className="flex items-center gap-2">
-                {myRole === "Admin" || myRole === "SuperAdmin" ? (
-                  <Link
-                    href="/admin"
-                    className="rounded-2xl px-4 py-1.5 text-sm border font-semibold"
-                    style={{ borderColor, background: softGradient }}
-                  >
-                    پنل ادمین 🛡️
-                  </Link>
-                ) : (
-                  <Link
-                    href="/dashboard"
-                    className="rounded-2xl px-4 py-1.5 text-sm border font-semibold"
-                    style={{ borderColor, background: softGradient }}
-                  >
-                    داشبورد 👤
-                  </Link>
-                )}
-              </div>
-            )}
+            {/* ✅ داشبورد/ادمین زیر سرچ حذف شد */}
           </div>
         </section>
 
@@ -820,24 +795,10 @@ export default function PublicUserPage() {
             className="lg:col-span-1 rounded-3xl border p-4 flex flex-col overflow-hidden"
             style={{ borderColor, background: sectionBg }}
           >
-            <div className="flex items-center justify-between shrink-0">
+            <div className="flex items-center justify-center shrink-0">
               <h2 className="text-base font-semibold text-foreground">
                 بیوگرافی
               </h2>
-              {isOwner && (
-                <Link
-                  href="/dashboard#bio"
-                  className="text-sm rounded-xl px-3 py-1.5 border font-semibold"
-                  style={{
-                    borderColor,
-                    background: isDark
-                      ? "hsl(0 0% 10%)"
-                      : "hsl(var(--background))",
-                  }}
-                >
-                  مدیریت ✍️
-                </Link>
-              )}
             </div>
 
             <div
@@ -845,7 +806,7 @@ export default function PublicUserPage() {
               style={{ scrollbarWidth: "thin" }}
             >
               {bio.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground text-center">
                   هنوز بیوگرافی ثبت نشده.
                 </div>
               ) : (
@@ -883,22 +844,16 @@ export default function PublicUserPage() {
             className="lg:col-span-2 rounded-3xl border p-4 flex flex-col overflow-hidden"
             style={{ borderColor, background: sectionBg }}
           >
-            <div className="flex items-center justify-between shrink-0 mb-2">
-              <span className="text-xs text-muted-foreground">
-                {filteredAds.length.toLocaleString("fa-IR")} آگهی
-              </span>
-              {isOwner && (
-                <Link
-                  href="/dashboard"
-                  className="rounded-xl px-3 py-1.5 text-sm border font-semibold"
-                  style={{ borderColor, background: softGradient }}
-                >
-                  + ثبت آگهی
-                </Link>
-              )}
+            {/* ✅ جای تعداد آگهی: آگهی‌های من (کوچک وسط‌چین) */}
+            <div className="flex items-center justify-center shrink-0 mb-3">
+              <div
+                className="px-4 py-1.5 rounded-2xl border text-[12px] font-semibold"
+                style={{ borderColor, background: softGradient }}
+              >
+                {isOwner ? "آگهی‌های من" : "آگهی‌های این نمایشگاه"}
+              </div>
             </div>
 
-            {/* ✅ فقط این اسکرول می‌خورد */}
             <div
               className="flex-1 min-h-0 overflow-y-auto pr-0.5"
               style={{ scrollbarWidth: "thin" }}

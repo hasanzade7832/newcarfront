@@ -1,33 +1,35 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { useAuthStore } from "@/store/auth.store";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-
 import BioManager from "@/app/admin/BioManager";
-import UserManager from "@/app/admin/UserManager"; // ✅ اضافه شد
+import UserManager from "@/app/admin/UserManager";
+import WebsiteDescriptionManager from "./WebsiteDescriptionManager";
+import FlashSettingsManager from "./FlashSettingsManager";
 
 export default function AdminPage() {
   const token = useAuthStore((s) => s.token);
   const role = useAuthStore((s) => s.role);
-
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isAdmin = role === "Admin" || role === "SuperAdmin";
-  const isSuperAdmin = role === "SuperAdmin";
+  // ✅ تغییر اصلی: بررسی نقش با حذف فاصله‌ها و حروف بزرگ/کوچک
+  const cleanRole = role?.toLowerCase().replace(/\s+/g, "");
+  const isAdmin = cleanRole === "admin" || cleanRole === "superadmin";
+  const isSuperAdmin = cleanRole === "superadmin";
 
   const tabs = useMemo(
     () =>
       [
         { key: "bio" as const, label: "مدیریت بیوگرافی", show: isAdmin },
         { key: "users" as const, label: "مدیریت کاربران", show: isSuperAdmin },
+        { key: "flash" as const, label: "مدیریت فوروارد", show: isSuperAdmin },
+        { key: "website" as const, label: "توضیحات سایت", show: isSuperAdmin },
       ].filter((t) => t.show),
     [isAdmin, isSuperAdmin]
   );
@@ -40,7 +42,6 @@ export default function AdminPage() {
     }
   }, [tabs, active]);
 
-  // ✅ Accent gradient: لایت ملایم / دارک پررنگ‌تر (مثل Header)
   const softGradient = useMemo(() => {
     return isDark
       ? "linear-gradient(90deg, rgba(34,197,94,.62), rgba(56,189,248,.54), rgba(217,70,239,.52))"
@@ -124,7 +125,6 @@ export default function AdminPage() {
   return (
     <>
       <Header />
-
       <main className="mx-auto max-w-[1650px] px-2 sm:px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Sidebar */}
@@ -142,7 +142,6 @@ export default function AdminPage() {
               <div className="mt-0 space-y-2">
                 {tabs.map((t) => {
                   const activeNow = t.key === active;
-
                   return (
                     <button
                       key={t.key}
@@ -197,11 +196,8 @@ export default function AdminPage() {
                   );
                 })}
               </div>
-
-              {/* ✅ متن "بخش‌ها" حذف شد */}
             </motion.div>
           </aside>
-
           {/* Content */}
           <section className="lg:col-span-9">
             <motion.div
@@ -218,7 +214,10 @@ export default function AdminPage() {
                 <BioManager embedded canManageBio={true} />
               ) : active === "users" ? (
                 <UserManager canManageUsers={isSuperAdmin} />
+              ) : active === "flash" ? (
+                <FlashSettingsManager canManage={isSuperAdmin} />
               ) : null}
+              {active === "website" ? <WebsiteDescriptionManager /> : null}
             </motion.div>
           </section>
         </div>

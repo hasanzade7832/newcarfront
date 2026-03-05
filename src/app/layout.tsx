@@ -18,7 +18,6 @@ export default function RootLayout({
         <AppThemeProvider>
           {children}
 
-          {/* ✅ همیشه روی مودال‌ها */}
           <Toaster
             position="top-center"
             toastOptions={{

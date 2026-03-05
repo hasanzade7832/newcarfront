@@ -52,3 +52,15 @@ body {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* src/app/globals.css */
+.flash-button {
+  background: linear-gradient(90deg, rgba(255, 165, 0, 0.2), rgba(255, 165, 0, 0.1));
+  box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.4);
+  transition: all 0.2s;
+}
+
+.flash-button:hover {
+  background: linear-gradient(90deg, rgba(255, 165, 0, 0.3), rgba(255, 165, 0, 0.2));
+  transform: scale(1.05);
+}

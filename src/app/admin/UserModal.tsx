@@ -1,28 +1,26 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
 import { X, Eye, EyeOff } from "lucide-react";
 
 export type UserRoleKey = "User" | "Admin";
-
 export type UserForm = {
   firstName: string;
   lastName: string;
   username: string;
   phone: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRoleKey;
+  city?: string;
+  address?: string; // ✅ تغییر به camelCase (همانند API)
+  showroomName?: string; // ✅ تغییر به camelCase (همانند API)
 };
 
 export default function UserModal({
@@ -46,40 +44,43 @@ export default function UserModal({
     username: "",
     phone: "",
     email: "",
-    password: "",
     role: "User",
+    city: "",
+    address: "", // ✅ camelCase
+    showroomName: "", // ✅ camelCase
   };
 
   const [form, setForm] = useState<UserForm>(empty);
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
+  function clean(v?: string | null | undefined): string {
+    return String(v ?? "").trim();
+  }
+
   useEffect(() => {
     if (!open) return;
 
     const init: UserForm = {
       ...empty,
-      ...(initialValue ?? {}),
+      ...initialValue!,
       role: (initialValue?.role ?? "User") as UserRoleKey,
       password: mode === "edit" ? "" : initialValue?.password ?? "",
+      city: clean(initialValue?.city),
+      address: clean(initialValue?.address), // ✅ camelCase
+      showroomName: clean(initialValue?.showroomName), // ✅ camelCase
     };
 
     setForm(init);
     setShowPass(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialValue, mode]);
 
-  function set<K extends keyof UserForm>(key: K, val: UserForm[K]) {
+  function set<K extends keyof UserForm>(key: K, val: UserForm[K] | string) {
     setForm((p) => ({ ...p, [key]: val }));
-  }
-
-  function clean(v?: string | null) {
-    return String(v ?? "").trim();
   }
 
   function validate(): { ok: boolean; msg?: string } {
     if (!canManageUsers) return { ok: false, msg: "دسترسی ندارید." };
-
     if (!clean(form.firstName)) return { ok: false, msg: "نام الزامی است." };
     if (!clean(form.lastName))
       return { ok: false, msg: "نام خانوادگی الزامی است." };
@@ -91,12 +92,21 @@ export default function UserModal({
     if (!clean(form.email)) return { ok: false, msg: "ایمیل الزامی است." };
 
     if (mode === "create") {
+      if (!clean(form.city)) return { ok: false, msg: "شهر الزامی است." };
+      if (!clean(form.address))
+        // ✅ camelCase
+        return { ok: false, msg: "آدرس دقیق الزامی است." };
+      if (!clean(form.showroomName))
+        // ✅ camelCase
+        return { ok: false, msg: "نام نمایشگاه الزامی است." };
+    }
+
+    if (mode === "create") {
       if (!clean(form.password))
         return { ok: false, msg: "رمز عبور الزامی است." };
       if (clean(form.password).length < 6)
         return { ok: false, msg: "رمز عبور حداقل ۶ کاراکتر باشد." };
     } else {
-      // edit: password optional
       if (clean(form.password) && clean(form.password).length < 6) {
         return {
           ok: false,
@@ -117,27 +127,39 @@ export default function UserModal({
 
     setLoading(true);
     try {
-      await onSubmit({
+      const payload: UserForm = {
         firstName: clean(form.firstName),
         lastName: clean(form.lastName),
         username: clean(form.username),
         phone: clean(form.phone),
         email: clean(form.email),
-        password: clean(form.password),
         role: form.role,
-      });
+        city: clean(form.city) || undefined,
+        address: clean(form.address) || undefined, // ✅ camelCase
+        showroomName: clean(form.showroomName) || undefined, // ✅ camelCase
+      };
 
+      if (mode === "create" || clean(form.password)) {
+        payload.password = clean(form.password);
+      } else {
+        delete payload.password;
+      }
+
+      await onSubmit(payload);
+      toast.success(
+        `کاربر ${mode === "edit" ? "با موفقیت ویرایش شد" : "ایجاد شد"}`
+      );
       onOpenChange(false);
     } catch (e: any) {
+      console.error(e);
       toast.error("عملیات ناموفق بود", {
-        description: e?.response?.data ?? "لطفاً دوباره تلاش کنید.",
+        description: e?.response?.data ?? "خطای نامشخص در ارتباط با سرور.",
       });
     } finally {
       setLoading(false);
     }
   }
 
-  // ✅ گرادیانت قوی‌تر
   const softGradient = useMemo(() => {
     return "linear-gradient(90deg, rgba(34,197,94,.72), rgba(56,189,248,.64), rgba(217,70,239,.58))";
   }, []);
@@ -165,17 +187,14 @@ export default function UserModal({
           background: surfaceBg,
         }}
       >
-        {/* ✅ برای رفع ارور DialogTitle ولی بدون نمایش هدر */}
         <VisuallyHidden>
           <DialogTitle>
             {mode === "edit" ? "ویرایش کاربر" : "افزودن کاربر"}
           </DialogTitle>
         </VisuallyHidden>
 
-        {/* Top color bar */}
         <div className="h-1.5 w-full" style={{ background: softGradient }} />
 
-        {/* Close only (بدون هدر/عنوان) */}
         <div className="relative">
           <button
             type="button"
@@ -249,6 +268,36 @@ export default function UserModal({
               />
             </Field>
 
+            <Field label="شهر *">
+              <Input
+                value={form.city ?? ""}
+                onChange={(e) => set("city", e.target.value)}
+                className="rounded-2xl h-12"
+                placeholder="مثلاً تهران"
+                disabled={!canManageUsers || loading}
+              />
+            </Field>
+
+            <Field label="آدرس دقیق *">
+              <Input
+                value={form.address ?? ""} // ✅ camelCase
+                onChange={(e) => set("address", e.target.value)} // ✅ camelCase
+                className="rounded-2xl h-12"
+                placeholder="آدرس کامل"
+                disabled={!canManageUsers || loading}
+              />
+            </Field>
+
+            <Field label="نام نمایشگاه *">
+              <Input
+                value={form.showroomName ?? ""} // ✅ camelCase
+                onChange={(e) => set("showroomName", e.target.value)} // ✅ camelCase
+                className="rounded-2xl h-12"
+                placeholder="نام نمایشگاه خودرو"
+                disabled={!canManageUsers || loading}
+              />
+            </Field>
+
             <Field
               label={mode === "edit" ? "رمز عبور (اختیاری)" : "رمز عبور *"}
             >
@@ -261,17 +310,16 @@ export default function UserModal({
               >
                 <input
                   type={showPass ? "text" : "password"}
-                  value={form.password}
+                  value={form.password ?? ""}
                   onChange={(e) => set("password", e.target.value)}
                   className="w-full bg-transparent outline-none text-sm"
                   placeholder={
                     mode === "edit"
-                      ? "اگر نیاز بود تغییر بده..."
+                      ? "اگر نیاز به تغییر رمز دارید، وارد کنید"
                       : "حداقل ۶ کاراکتر"
                   }
                   disabled={!canManageUsers || loading}
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPass((p) => !p)}
@@ -293,7 +341,6 @@ export default function UserModal({
               </div>
             </Field>
 
-            {/* ✅ نقش کاربر: خیلی شیک + هاور گرادیانت */}
             <Field label="نقش (فعلی) *">
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -309,20 +356,18 @@ export default function UserModal({
                         : "hsl(var(--background))",
                   }}
                   onMouseEnter={(e) => {
-                    if (!canManageUsers || loading) return;
-                    if (form.role !== "User")
-                      e.currentTarget.style.background = softGradient;
+                    if (!canManageUsers || loading || form.role === "User")
+                      return;
+                    e.currentTarget.style.background = softGradient;
                   }}
                   onMouseLeave={(e) => {
-                    if (!canManageUsers || loading) return;
-                    if (form.role !== "User")
-                      e.currentTarget.style.background =
-                        "hsl(var(--background))";
+                    if (!canManageUsers || loading || form.role === "User")
+                      return;
+                    e.currentTarget.style.background = "hsl(var(--background))";
                   }}
                 >
                   User
                 </button>
-
                 <button
                   type="button"
                   onClick={() => set("role", "Admin")}
@@ -336,15 +381,14 @@ export default function UserModal({
                         : "hsl(var(--background))",
                   }}
                   onMouseEnter={(e) => {
-                    if (!canManageUsers || loading) return;
-                    if (form.role !== "Admin")
-                      e.currentTarget.style.background = softGradient;
+                    if (!canManageUsers || loading || form.role === "Admin")
+                      return;
+                    e.currentTarget.style.background = softGradient;
                   }}
                   onMouseLeave={(e) => {
-                    if (!canManageUsers || loading) return;
-                    if (form.role !== "Admin")
-                      e.currentTarget.style.background =
-                        "hsl(var(--background))";
+                    if (!canManageUsers || loading || form.role === "Admin")
+                      return;
+                    e.currentTarget.style.background = "hsl(var(--background))";
                   }}
                 >
                   Admin
@@ -366,10 +410,9 @@ export default function UserModal({
                 {loading
                   ? "در حال انجام..."
                   : mode === "edit"
-                  ? "ذخیره"
+                  ? "ذخیره تغییرات"
                   : "ایجاد"}
               </Button>
-
               {!canManageUsers ? (
                 <div className="mt-3 text-center text-sm text-muted-foreground">
                   فقط SuperAdmin امکان افزودن/ویرایش کاربر را دارد.
