@@ -5,21 +5,25 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
 
-export default function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
+interface ThemeToggleProps {
+  className?: string;
+}
 
-  // ✅ همه hookها همیشه اجرا میشن
+export default function ThemeToggle({ className }: ThemeToggleProps) {
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+
   useEffect(() => setMounted(true), []);
 
-  // ✅ فقط UI رو بعد از mount دقیق نشون بده، ولی کامپوننت رو return نکن قبل از hookها
   const isDark = mounted ? resolvedTheme === "dark" : false;
+
+  if (!mounted) return null; // ✅ تا mount نشده چیزی رندر نشود
 
   return (
     <Button
       type="button"
       variant="outline"
-      className="h-10 w-10 rounded-2xl cursor-pointer"
+      className={`h-10 w-10 rounded-2xl cursor-pointer ${className || ""}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       title="تغییر تم"
       aria-label="تغییر تم"

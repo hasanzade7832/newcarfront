@@ -1140,13 +1140,24 @@ export default function HomePage() {
             transform: rotate(360deg);
           }
         }
-        /* جلوگیری از اسکرول افقی در کل صفحه */
+        @keyframes pulse {
+          0%,
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.3);
+            opacity: 0.5;
+          }
+        }
         html,
         body {
           max-width: 100%;
           overflow-x: hidden;
         }
       `}</style>
+
       <DescModal
         ad={descAd}
         open={descOpen}
@@ -1161,22 +1172,37 @@ export default function HomePage() {
         borderColor={borderColor}
         isDark={isDark}
       />
+
       <Header />
+
       <main
         className="mx-auto max-w-[1800px] px-2 sm:px-4 py-3"
-        style={{
-          height: "calc(100vh - 84px)",
-          overflow: "hidden",
-        }}
+        style={{ height: "calc(100vh - 84px)", overflow: "hidden" }}
       >
         <div
           className="rounded-[26px] border flex flex-col h-full overflow-hidden p-3 sm:p-4"
           style={{ borderColor, background: sectionBg }}
         >
+          {/* جستجو + دکمه‌ها */}
           <div className="flex justify-between items-center shrink-0 gap-2">
             <div className="max-w-[1040px] mx-auto relative flex-1 flex items-center justify-center">
-              <div className="relative w-full flex justify-center">
-                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <div className="relative w-full max-w-[600px]">
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="جستجو در آگهی‌ها..."
+                  className="h-10 rounded-2xl border text-sm outline-none w-full pr-10 pl-10"
+                  style={{
+                    borderColor,
+                    background: isDark
+                      ? "hsl(0 0% 10%)"
+                      : "hsl(var(--background))",
+                    color: "hsl(var(--foreground))",
+                  }}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
                 <button
                   type="button"
                   onClick={refreshAll}
@@ -1191,20 +1217,6 @@ export default function HomePage() {
                 >
                   <RefreshCcw className="h-4 w-4" />
                 </button>
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="جستجو در آگهی‌ها..."
-                  className="h-10 rounded-2xl border pr-10 pl-10 text-sm outline-none text-center w-full max-w-[600px]"
-                  style={{
-                    borderColor,
-                    background: isDark
-                      ? "hsl(0 0% 10%)"
-                      : "hsl(var(--background))",
-                    color: "hsl(var(--foreground))",
-                    cursor: "pointer",
-                  }}
-                />
                 {search && (
                   <button
                     type="button"
@@ -1217,45 +1229,50 @@ export default function HomePage() {
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setShowroomModalOpen(true)}
-              className="hidden sm:inline-flex px-4 py-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20 ml-4"
-              style={{
-                boxShadow: "0 4px 20px rgba(56, 189, 248, 0.35)",
-                transition: "all 0.2s ease",
-                cursor: "pointer",
-              }}
-            >
-              نمایشگاهها
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDescAd({
-                  id: "desc",
-                  description: websiteDescription,
-                } as any);
-                setDescOpen(true);
-              }}
-              className="sm:hidden px-3 py-1.5 rounded-full text-xs font-semibold border"
-              style={{
-                borderColor,
-                background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                color: "rgb(56,189,248)",
-                animation: "rowFlashBlue 1.4s ease-in-out infinite alternate",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              توضیحات
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowroomModalOpen(true)}
+                className="hidden sm:inline-flex px-4 py-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20"
+                style={{
+                  boxShadow: "0 4px 20px rgba(56,189,248,0.35)",
+                  transition: "all 0.2s ease",
+                  cursor: "pointer",
+                }}
+              >
+                نمایشگاهها
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDescAd({
+                    id: "desc",
+                    description: websiteDescription,
+                  } as any);
+                  setDescOpen(true);
+                }}
+                className="sm:hidden px-3 py-1.5 rounded-full text-xs font-semibold border"
+                style={{
+                  borderColor,
+                  background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
+                  color: "rgb(56,189,248)",
+                  animation: "rowFlashBlue 1.4s ease-in-out infinite alternate",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                توضیحات
+              </button>
+            </div>
           </div>
+
+          {/* موبایل نمایشگاه‌ها */}
           <div className="mt-2 sm:hidden w-full flex justify-center">
             <button
               onClick={() => setShowroomModalOpen(true)}
               className="w-full max-w-[300px] px-4 py-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20"
               style={{
-                boxShadow: "0 4px 20px rgba(56, 189, 248, 0.35)",
+                boxShadow: "0 4px 20px rgba(56,189,248,0.35)",
                 transition: "all 0.2s ease",
                 cursor: "pointer",
               }}
@@ -1263,19 +1280,24 @@ export default function HomePage() {
               نمایشگاهها
             </button>
           </div>
+
           <div
             className="mt-2.5 h-px opacity-25 shrink-0"
             style={{ background: "hsl(var(--border))" }}
           />
+
+          {/* ردیف‌ها: ستون‌وار موبایل + اسکرول افقی راست به چپ */}
           <div
-            className="flex-1 min-h-0 flex gap-3 mt-2"
+            className="flex-1 min-h-0 mt-2 overflow-hidden flex flex-col md:flex-row gap-3"
             style={{ direction: "ltr" }}
           >
             <div
-              className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-1"
-              style={{ scrollbarWidth: "thin" }}
+              className="flex-1 min-w-0 overflow-y-auto overflow-x-auto pb-1"
+              ref={(el) => {
+                if (el) el.scrollLeft = el.scrollWidth;
+              }}
             >
-              <div className="space-y-1">
+              <div className="flex flex-col gap-3 w-max min-w-full md:w-auto rtl">
                 {loading ? (
                   <LoadingIndicator />
                 ) : combinedItems.length === 0 ? (
@@ -1325,6 +1347,8 @@ export default function HomePage() {
                 )}
               </div>
             </div>
+
+            {/* توضیحات دسکتاپ */}
             <div className="flex-1 shrink-0 hidden md:block">
               <EmptyRightPanel
                 description={websiteDescription}
@@ -1333,9 +1357,11 @@ export default function HomePage() {
               />
             </div>
           </div>
+
+          {/* فوتر آمار */}
           <div
             className="mt-2 pt-2 flex items-center justify-end gap-2 flex-wrap shrink-0"
-            style={{ borderTop: `1px solid hsl(var(--border) / 0.25)` }}
+            style={{ borderTop: `1px solid hsl(var(--border)/0.25)` }}
           >
             <div
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-xs font-semibold"
@@ -1371,10 +1397,10 @@ export default function HomePage() {
                 {onlineCount.toLocaleString("fa-IR")}
               </span>
             </div>
-            {/* ✅ طبق درخواست شما: آیتم وضعیت فوروارد در فوتر کلاً حذف شد */}
           </div>
         </div>
       </main>
+
       <ShowroomSearchModal
         isOpen={showroomModalOpen}
         onClose={() => setShowroomModalOpen(false)}

@@ -13,9 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   CarFront,
   LogOut,
@@ -26,7 +26,9 @@ import {
   Pencil,
   Menu,
   X,
+  ChevronRight,
 } from "lucide-react";
+
 type BioItem = {
   id: number;
   userId?: number;
@@ -37,17 +39,20 @@ type BioItem = {
   createdAt?: string;
   updatedAt?: string;
 };
+
 function roleLabel(role?: string | null) {
   if (!role) return "";
   if (role === "SuperAdmin") return "Super Admin";
   if (role === "Admin") return "Admin";
   return "User";
 }
+
 function roleFa(role?: string | null) {
   if (role === "SuperAdmin") return "سوپر ادمین";
   if (role === "Admin") return "ادمین";
   return "کاربر";
 }
+
 function parseAdvancedLegacy(
   description?: string
 ): { person: string; contact: string } | null {
@@ -68,6 +73,7 @@ function parseAdvancedLegacy(
   }
   return null;
 }
+
 export default function Header() {
   const router = useRouter();
   const auth = useAuthStore() as any;
@@ -91,13 +97,37 @@ export default function Header() {
   const [meUsername, setMeUsername] = useState<string>(
     String(storeUsername ?? "").trim()
   );
+
+  // Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, []);
+
+  // Prevent body scroll when menu open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
+
   useEffect(() => {
     if (typeof storeUserId === "number") setMeId(storeUserId);
   }, [storeUserId]);
+
   useEffect(() => {
     const u = String(storeUsername ?? "").trim();
     if (u) setMeUsername(u);
   }, [storeUsername]);
+
   useEffect(() => {
     if (!hasToken) return;
     const u = String(storeUsername ?? "").trim();
@@ -120,6 +150,7 @@ export default function Header() {
       alive = false;
     };
   }, [hasToken, storeUsername, storeUserId]);
+
   const headerBg = useMemo(() => {
     const main = isDark
       ? "linear-gradient(90deg, rgba(16,185,129,.40) 0%, rgba(56,189,248,.36) 45%, rgba(217,70,239,.32) 100%)"
@@ -132,33 +163,47 @@ export default function Header() {
       : "radial-gradient(900px 200px at 50% 0%, rgba(0,0,0,.05) 0%, rgba(0,0,0,0) 62%)";
     return `${sheen}, ${main}, ${base}`;
   }, [isDark]);
+
+  const mobilePanelBg = useMemo(() => {
+    return isDark
+      ? "linear-gradient(180deg, rgba(10,10,10,1) 0%, rgba(12,12,12,1) 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(252,252,252,1) 100%)";
+  }, [isDark]);
+
   const softGradient = useMemo(() => {
     return isDark
       ? "linear-gradient(90deg, rgba(34,197,94,.62), rgba(56,189,248,.54), rgba(217,70,239,.52))"
       : "linear-gradient(90deg, rgba(34,197,94,.22), rgba(56,189,248,.18), rgba(217,70,239,.16))";
   }, [isDark]);
+
   const softGradient2 = useMemo(() => {
     return isDark
       ? "linear-gradient(90deg, rgba(56,189,248,.52), rgba(217,70,239,.44), rgba(34,197,94,.48))"
       : "linear-gradient(90deg, rgba(56,189,248,.20), rgba(217,70,239,.16), rgba(34,197,94,.18))";
   }, [isDark]);
+
   const dangerGradient = useMemo(() => {
     return isDark
       ? "linear-gradient(90deg, rgba(239,68,68,.52), rgba(56,189,248,.22), rgba(217,70,239,.20))"
       : "linear-gradient(90deg, rgba(239,68,68,.30), rgba(56,189,248,.16), rgba(217,70,239,.12))";
   }, [isDark]);
+
   const roleTextColor = isDark ? "#ffffff" : "#0a0a0a";
+
   const btnBase =
     "rounded-2xl border px-4 h-10 text-sm font-semibold select-none " +
     "transition-all duration-200 " +
     "cursor-pointer hover:-translate-y-[1px] hover:shadow-md active:translate-y-0";
+
   const menuItemBase =
     "w-full rounded-2xl px-3 py-2 text-sm font-semibold flex items-center justify-center gap-2 " +
     "cursor-pointer select-none outline-none transition-all " +
     "hover:-translate-y-[1px] hover:shadow-sm";
+
   const handleLogout = useCallback(() => {
     if (loggingOut) return;
     setLoggingOut(true);
+    setMobileMenuOpen(false);
     setBioItems([]);
     setBioLoading(false);
     setTimeout(() => {
@@ -169,24 +214,97 @@ export default function Header() {
       }
     }, 0);
   }, [clear, loggingOut]);
+
   const applyHoverBg = (el: HTMLElement, bg: string) => {
     el.style.background = bg;
     el.style.borderColor = "hsl(var(--border))";
   };
+
   const applyNormalBg = (el: HTMLElement) => {
     el.style.background = "hsl(var(--background))";
     el.style.borderColor = "transparent";
   };
+
   const greetingName = (meUsername || "").trim() || (meId ? `#${meId}` : "");
   const greetingText = greetingName
     ? `👋 خوش آمدی ${roleFa(role)} ${greetingName}`
     : `👋 خوش آمدی ${roleFa(role)}`;
 
-  // Mobile menu state
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navCloseTo = (path: string) => {
+    setMobileMenuOpen(false);
+    router.push(path);
+  };
+
+  // ─── Mobile menu nav items config ────────────────────────────────────────────
+  const mobileNavItems = useMemo(() => {
+    const items: {
+      key: string;
+      label: string;
+      icon: React.ReactNode;
+      href?: string;
+      onClick?: () => void;
+      gradient: string;
+      danger?: boolean;
+    }[] = [];
+
+    items.push({
+      key: "bio",
+      label: "مدیریت بیوگرافی",
+      icon: <Pencil className="h-4 w-4" />,
+      onClick: () => navCloseTo("/biomanager"),
+      gradient: softGradient2,
+    });
+
+    if (isAdmin) {
+      items.push({
+        key: "admin",
+        label: "پنل مدیریت",
+        icon: <Shield className="h-4 w-4" />,
+        href: "/admin",
+        gradient: softGradient,
+      });
+    }
+
+    items.push({
+      key: "dashboard",
+      label: "داشبورد",
+      icon: <LayoutDashboard className="h-4 w-4" />,
+      href: "/dashboard",
+      gradient: softGradient2,
+    });
+
+    if (typeof meId === "number") {
+      items.push({
+        key: "profile",
+        label: "پنل کاربری",
+        icon: <UserRound className="h-4 w-4" />,
+        href: `/u/${meId}`,
+        gradient: softGradient,
+      });
+    }
+
+    items.push({
+      key: "logout",
+      label: "خروج",
+      icon: <LogOut className="h-4 w-4" />,
+      onClick: handleLogout,
+      gradient: dangerGradient,
+      danger: true,
+    });
+
+    return items;
+  }, [
+    isAdmin,
+    meId,
+    softGradient,
+    softGradient2,
+    dangerGradient,
+    handleLogout,
+  ]);
 
   return (
     <div className="sticky top-0 z-50">
+      {/* ── Logout overlay ──────────────────────────────────────────────────── */}
       {loggingOut ? (
         <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/55">
           <div
@@ -218,6 +336,7 @@ export default function Header() {
         </div>
       ) : null}
 
+      {/* ── Main header bar ─────────────────────────────────────────────────── */}
       <motion.header
         initial={{ y: -10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -229,11 +348,12 @@ export default function Header() {
         }}
         suppressHydrationWarning
       >
-        <div className="mx-auto max-w-[1650px] px-2 sm:px-4 py-3 flex items-center justify-between gap-3">
-          {/* LEFT: Logo */}
+        <div className="mx-auto max-w-[1650px] px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
+          {/* ── Logo ────────────────────────────────────────────────────── */}
           <motion.div
             whileHover={{ y: -1, scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
+            className="shrink-0"
           >
             <button
               type="button"
@@ -251,13 +371,13 @@ export default function Header() {
                   style={{ background: softGradient }}
                 />
                 <span
-                  className="relative h-10 w-10 rounded-2xl grid place-items-center border shadow-sm"
+                  className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-2xl grid place-items-center border shadow-sm"
                   style={{
                     borderColor: "hsl(var(--border))",
                     background: softGradient,
                   }}
                 >
-                  <CarFront className="h-5 w-5" />
+                  <CarFront className="h-4 w-4 sm:h-5 sm:w-5" />
                 </span>
               </span>
               <span className="flex flex-col items-start leading-tight">
@@ -271,15 +391,12 @@ export default function Header() {
             </button>
           </motion.div>
 
-          {/* CENTER: خوش آمدگویی + مدیریت بیوگرافی */}
-          <div className="flex-1 flex justify-center">
+          {/* ── Center: greeting + bio manager (md+) ────────────────────── */}
+          <div className="hidden md:flex flex-1 justify-center items-center gap-2 min-w-0 px-2">
             {hasToken ? (
-              <div className="flex items-center gap-2">
+              <>
                 <div
-                  className={cn(
-                    "px-5 py-2 rounded-2xl border text-sm sm:text-base font-semibold",
-                    "transition-all duration-200"
-                  )}
+                  className="px-4 py-2 rounded-2xl border text-sm lg:text-base font-semibold truncate max-w-xs lg:max-w-sm xl:max-w-md transition-all duration-200"
                   style={{
                     borderColor: "hsl(var(--border))",
                     background: isDark ? "hsl(0 0% 8%)" : "hsl(0 0% 100%)",
@@ -292,7 +409,7 @@ export default function Header() {
                   type="button"
                   onClick={() => router.push("/biomanager")}
                   className={cn(
-                    "h-10 rounded-2xl border px-3 text-sm font-semibold cursor-pointer",
+                    "h-9 lg:h-10 rounded-2xl border px-3 text-sm font-semibold cursor-pointer shrink-0",
                     "transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md"
                   )}
                   style={{
@@ -311,33 +428,28 @@ export default function Header() {
                   title="مدیریت بیوگرافی"
                 >
                   <span className="inline-flex items-center gap-2">
-                    <Pencil className="h-4 w-4 opacity-80" />
-                    مدیریت بیوگرافی
+                    <Pencil className="h-3.5 w-3.5 lg:h-4 lg:w-4 opacity-80" />
+                    <span className="hidden lg:inline">مدیریت بیوگرافی</span>
+                    <span className="lg:hidden">بیوگرافی</span>
                   </span>
                 </button>
-              </div>
+              </>
             ) : null}
           </div>
 
-          {/* RIGHT: Desktop and Mobile */}
-          <div className="flex items-center gap-2">
-            {/* Mobile Hamburger Menu */}
-            <button
-              className="md:hidden p-2 text-foreground"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="منو"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center gap-2">
+          {/* ── Right side ──────────────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Desktop only actions */}
+            <div className="hidden md:flex items-center gap-1.5 lg:gap-2">
               {!hasToken ? (
                 <>
                   <button
                     type="button"
                     onClick={() => router.push("/login")}
-                    className={cn(btnBase, "relative overflow-hidden")}
+                    className={cn(
+                      btnBase,
+                      "relative overflow-hidden h-9 lg:h-10 px-3 lg:px-4"
+                    )}
                     style={{
                       borderColor: "hsl(var(--border))",
                       background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
@@ -353,7 +465,10 @@ export default function Header() {
                   <button
                     type="button"
                     onClick={() => router.push("/register")}
-                    className={cn(btnBase, "relative overflow-hidden")}
+                    className={cn(
+                      btnBase,
+                      "relative overflow-hidden h-9 lg:h-10 px-3 lg:px-4"
+                    )}
                     style={{
                       borderColor: "hsl(var(--border))",
                       background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
@@ -366,16 +481,353 @@ export default function Header() {
                     />
                     <span className="relative z-10">ثبت‌نام</span>
                   </button>
-                  <ThemeToggle />
                 </>
               ) : (
-                <>
-                  <ThemeToggle />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl border bg-card cursor-pointer"
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl border bg-card cursor-pointer h-9 lg:h-10 px-3 lg:px-4 text-sm"
+                      style={{
+                        borderColor: "hsl(var(--border))",
+                        background: isDark
+                          ? "hsl(0 0% 10%)"
+                          : "hsl(var(--card))",
+                        color: "hsl(var(--foreground))",
+                      }}
+                    >
+                      حساب کاربری
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-60 p-2 border shadow-lg rounded-2xl"
+                    style={{
+                      backgroundColor: "hsl(var(--popover))",
+                      color: "hsl(var(--popover-foreground))",
+                      borderColor: "hsl(var(--border))",
+                      backdropFilter: "none",
+                      WebkitBackdropFilter: "none",
+                      opacity: 1,
+                    }}
+                  >
+                    {isAdmin ? (
+                      <DropdownMenuItem asChild className="p-0">
+                        <Link
+                          href="/admin"
+                          className={cn(menuItemBase)}
+                          style={{
+                            border: "1px solid transparent",
+                            background: "hsl(var(--background))",
+                          }}
+                          onMouseEnter={(e) =>
+                            applyHoverBg(e.currentTarget, softGradient)
+                          }
+                          onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
+                          onFocus={(e) =>
+                            applyHoverBg(e.currentTarget, softGradient)
+                          }
+                          onBlur={(e) => applyNormalBg(e.currentTarget)}
+                        >
+                          <Shield className="h-4 w-4 opacity-80" />
+                          پنل مدیریت
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuItem asChild className="p-0">
+                      <Link
+                        href="/dashboard"
+                        className={cn(menuItemBase)}
+                        style={{
+                          border: "1px solid transparent",
+                          background: "hsl(var(--background))",
+                        }}
+                        onMouseEnter={(e) =>
+                          applyHoverBg(e.currentTarget, softGradient2)
+                        }
+                        onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
+                        onFocus={(e) =>
+                          applyHoverBg(e.currentTarget, softGradient2)
+                        }
+                        onBlur={(e) => applyNormalBg(e.currentTarget)}
+                      >
+                        <LayoutDashboard className="h-4 w-4 opacity-80" />
+                        داشبورد
+                      </Link>
+                    </DropdownMenuItem>
+                    {typeof meId === "number" ? (
+                      <DropdownMenuItem asChild className="p-0">
+                        <Link
+                          href={`/u/${meId}`}
+                          className={cn(menuItemBase)}
+                          style={{
+                            border: "1px solid transparent",
+                            background: "hsl(var(--background))",
+                          }}
+                          onMouseEnter={(e) =>
+                            applyHoverBg(e.currentTarget, softGradient)
+                          }
+                          onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
+                          onFocus={(e) =>
+                            applyHoverBg(e.currentTarget, softGradient)
+                          }
+                          onBlur={(e) => applyNormalBg(e.currentTarget)}
+                        >
+                          <UserRound className="h-4 w-4 opacity-80" />
+                          پنل کاربری
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className={cn(menuItemBase)}
+                      style={{
+                        border: "1px solid transparent",
+                        background: "hsl(var(--background))",
+                        color: "hsl(var(--foreground))",
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget as HTMLElement;
+                        applyHoverBg(el, dangerGradient);
+                        el.style.color = "#fff";
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget as HTMLElement;
+                        applyNormalBg(el);
+                        el.style.color = "hsl(var(--foreground))";
+                      }}
+                      onFocus={(e) => {
+                        const el = e.currentTarget as HTMLElement;
+                        applyHoverBg(el, dangerGradient);
+                        el.style.color = "#fff";
+                      }}
+                      onBlur={(e) => {
+                        const el = e.currentTarget as HTMLElement;
+                        applyNormalBg(el);
+                        el.style.color = "hsl(var(--foreground))";
+                      }}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        handleLogout();
+                      }}
+                      disabled={loggingOut}
+                    >
+                      <LogOut className="h-4 w-4 opacity-90" />
+                      خروج
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+
+            {/* ThemeToggle — always visible */}
+            <ThemeToggle />
+
+            {/* Hamburger — sm and below (mobile + small tablet) */}
+            <motion.button
+              whileTap={{ scale: 0.93 }}
+              className="md:hidden flex items-center justify-center h-9 w-9 rounded-2xl border cursor-pointer"
+              style={{
+                borderColor: "hsl(var(--border))",
+                background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
+                color: "hsl(var(--foreground))",
+              }}
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="باز کردن منو"
+            >
+              <Menu className="h-4.5 w-4.5" />
+            </motion.button>
+          </div>
+        </div>
+      </motion.header>
+
+      {/* ── Mobile / Tablet Slide-over panel ──────────────────────────────────── */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-hidden="true"
+            />
+
+            {/* Slide panel */}
+            <motion.div
+              key="panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 340, damping: 34 }}
+              dir="rtl"
+              className="fixed inset-y-0 right-0 z-[70] flex flex-col w-[85vw] max-w-[360px] border-l shadow-2xl overflow-hidden"
+              style={{
+                borderColor: "hsl(var(--border))",
+                background: mobilePanelBg,
+              }}
+            >
+              {/* Panel header */}
+              <div
+                className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  background: headerBg,
+                }}
+              >
+                {/* Logo repeat */}
+                <button
+                  type="button"
+                  onClick={() => navCloseTo("/")}
+                  className="flex items-center gap-2 select-none cursor-pointer"
+                >
+                  <span
+                    className="h-8 w-8 rounded-xl grid place-items-center border shadow-sm"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      background: softGradient,
+                    }}
+                  >
+                    <CarFront className="h-4 w-4" />
+                  </span>
+                  <span
+                    className="text-sm font-extrabold tracking-tight"
+                    style={{ color: roleTextColor }}
+                  >
+                    Keyvan
+                  </span>
+                </button>
+
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="h-8 w-8 rounded-xl border flex items-center justify-center cursor-pointer"
+                  style={{
+                    borderColor: "hsl(var(--border))",
+                    background: isDark ? "hsl(0 0% 14%)" : "hsl(var(--card))",
+                    color: "hsl(var(--foreground))",
+                  }}
+                  aria-label="بستن منو"
+                >
+                  <X className="h-4 w-4" />
+                </motion.button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 space-y-2">
+                {hasToken ? (
+                  <>
+                    {/* Greeting card */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.05 }}
+                      className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold"
+                      style={{
+                        borderColor: "hsl(var(--border))",
+                        background: isDark ? "hsl(0 0% 8%)" : "hsl(0 0% 100%)",
+                        color: roleTextColor,
+                      }}
+                    >
+                      {greetingText}
+                    </motion.div>
+
+                    {/* Nav items */}
+                    {mobileNavItems.map((item, i) => {
+                      const sharedStyle: React.CSSProperties = {
+                        borderColor: "hsl(var(--border))",
+                        background: isDark
+                          ? "hsl(0 0% 10%)"
+                          : "hsl(var(--card))",
+                        color: item.danger
+                          ? "hsl(var(--destructive))"
+                          : "hsl(var(--foreground))",
+                      };
+
+                      const inner = (
+                        <span className="flex items-center gap-3">
+                          <span
+                            className="h-7 w-7 rounded-xl grid place-items-center shrink-0"
+                            style={{ background: item.gradient, opacity: 0.9 }}
+                          >
+                            {item.icon}
+                          </span>
+                          <span className="flex-1 text-right">
+                            {item.label}
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 opacity-30 shrink-0" />
+                        </span>
+                      );
+
+                      if (item.href) {
+                        return (
+                          <motion.div
+                            key={item.key}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.07 + i * 0.04 }}
+                          >
+                            <Link
+                              href={item.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="block w-full rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-150 active:scale-[.98]"
+                              style={sharedStyle}
+                            >
+                              {inner}
+                            </Link>
+                          </motion.div>
+                        );
+                      }
+
+                      return (
+                        <motion.div
+                          key={item.key}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.07 + i * 0.04 }}
+                        >
+                          {item.key === "logout" && (
+                            <div
+                              className="my-2 border-t"
+                              style={{ borderColor: "hsl(var(--border))" }}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={item.onClick}
+                            disabled={item.key === "logout" && loggingOut}
+                            className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold transition-all duration-150 active:scale-[.98] cursor-pointer disabled:opacity-60"
+                            style={sharedStyle}
+                          >
+                            {inner}
+                          </button>
+                        </motion.div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  /* Not logged in */
+                  <>
+                    {[
+                      { label: "ورود", path: "/login", gradient: softGradient },
+                      {
+                        label: "ثبت‌نام",
+                        path: "/register",
+                        gradient: softGradient2,
+                      },
+                    ].map((item, i) => (
+                      <motion.button
+                        key={item.path}
+                        type="button"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.06 + i * 0.05 }}
+                        onClick={() => navCloseTo(item.path)}
+                        className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold flex items-center gap-3 cursor-pointer active:scale-[.98] transition-all duration-150"
                         style={{
                           borderColor: "hsl(var(--border))",
                           background: isDark
@@ -384,318 +836,32 @@ export default function Header() {
                           color: "hsl(var(--foreground))",
                         }}
                       >
-                        حساب کاربری
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-60 p-2 border shadow-lg rounded-2xl"
-                      style={{
-                        backgroundColor: "hsl(var(--popover))",
-                        color: "hsl(var(--popover-foreground))",
-                        borderColor: "hsl(var(--border))",
-                        backdropFilter: "none",
-                        WebkitBackdropFilter: "none",
-                        opacity: 1,
-                      }}
-                    >
-                      {isAdmin ? (
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link
-                            href="/admin"
-                            className={cn(menuItemBase)}
-                            style={{
-                              border: "1px solid transparent",
-                              background: "hsl(var(--background))",
-                            }}
-                            onMouseEnter={(e) =>
-                              applyHoverBg(e.currentTarget, softGradient)
-                            }
-                            onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
-                            onFocus={(e) =>
-                              applyHoverBg(e.currentTarget, softGradient)
-                            }
-                            onBlur={(e) => applyNormalBg(e.currentTarget)}
-                          >
-                            <Shield className="h-4 w-4 opacity-80" />
-                            پنل مدیریت
-                          </Link>
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuItem asChild className="p-0">
-                        <Link
-                          href="/dashboard"
-                          className={cn(menuItemBase)}
-                          style={{
-                            border: "1px solid transparent",
-                            background: "hsl(var(--background))",
-                          }}
-                          onMouseEnter={(e) =>
-                            applyHoverBg(e.currentTarget, softGradient2)
-                          }
-                          onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
-                          onFocus={(e) =>
-                            applyHoverBg(e.currentTarget, softGradient2)
-                          }
-                          onBlur={(e) => applyNormalBg(e.currentTarget)}
-                        >
-                          <LayoutDashboard className="h-4 w-4 opacity-80" />
-                          داشبورد
-                        </Link>
-                      </DropdownMenuItem>
-                      {typeof meId === "number" ? (
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link
-                            href={`/u/${meId}`}
-                            className={cn(menuItemBase)}
-                            style={{
-                              border: "1px solid transparent",
-                              background: "hsl(var(--background))",
-                            }}
-                            onMouseEnter={(e) =>
-                              applyHoverBg(e.currentTarget, softGradient)
-                            }
-                            onMouseLeave={(e) => applyNormalBg(e.currentTarget)}
-                            onFocus={(e) =>
-                              applyHoverBg(e.currentTarget, softGradient)
-                            }
-                            onBlur={(e) => applyNormalBg(e.currentTarget)}
-                          >
-                            <UserRound className="h-4 w-4 opacity-80" />
-                            پنل کاربری
-                          </Link>
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className={cn(menuItemBase)}
-                        style={{
-                          border: "1px solid transparent",
-                          background: "hsl(var(--background))",
-                          color: "hsl(var(--foreground))",
-                        }}
-                        onMouseEnter={(e) => {
-                          const el = e.currentTarget as HTMLElement;
-                          applyHoverBg(el, dangerGradient);
-                          el.style.color = "#fff";
-                        }}
-                        onMouseLeave={(e) => {
-                          const el = e.currentTarget as HTMLElement;
-                          applyNormalBg(el);
-                          el.style.color = "hsl(var(--foreground))";
-                        }}
-                        onFocus={(e) => {
-                          const el = e.currentTarget as HTMLElement;
-                          applyHoverBg(el, dangerGradient);
-                          el.style.color = "#fff";
-                        }}
-                        onBlur={(e) => {
-                          const el = e.currentTarget as HTMLElement;
-                          applyNormalBg(el);
-                          el.style.color = "hsl(var(--foreground))";
-                        }}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          handleLogout();
-                        }}
-                        disabled={loggingOut}
-                      >
-                        <LogOut className="h-4 w-4 opacity-90" />
-                        خروج
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </motion.header>
+                        <span
+                          className="h-7 w-7 rounded-xl grid place-items-center shrink-0"
+                          style={{ background: item.gradient }}
+                        />
+                        <span className="flex-1 text-right">{item.label}</span>
+                        <ChevronRight className="h-3.5 w-3.5 opacity-30" />
+                      </motion.button>
+                    ))}
+                  </>
+                )}
+              </div>
 
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <motion.div
-          initial={{ x: "100%" }}
-          animate={{ x: 0 }}
-          exit={{ x: "100%" }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-background border-l border-border shadow-xl"
-        >
-          <div className="flex flex-col h-full">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h2 className="font-bold text-lg">منو</h2>
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="p-2 text-foreground"
+              {/* Panel footer */}
+              <div
+                className="px-4 py-3 border-t shrink-0 flex items-center justify-between"
+                style={{ borderColor: "hsl(var(--border))" }}
               >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {hasToken ? (
-                <div className="space-y-3">
-                  <div
-                    className="px-4 py-3 rounded-2xl border text-sm font-semibold"
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 8%)" : "hsl(0 0% 100%)",
-                      color: roleTextColor,
-                    }}
-                  >
-                    {greetingText}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push("/biomanager");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                      "transition-all duration-200 hover:bg-muted/50"
-                    )}
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                      color: "hsl(var(--foreground))",
-                    }}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Pencil className="h-4 w-4 opacity-80" />
-                      مدیریت بیوگرافی
-                    </span>
-                  </button>
-
-                  {isAdmin && (
-                    <Link
-                      href="/admin"
-                      className={cn(
-                        "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                        "transition-all duration-200 hover:bg-muted/50"
-                      )}
-                      style={{
-                        borderColor: "hsl(var(--border))",
-                        background: isDark
-                          ? "hsl(0 0% 10%)"
-                          : "hsl(var(--card))",
-                        color: "hsl(var(--foreground))",
-                      }}
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 opacity-80" />
-                        پنل مدیریت
-                      </span>
-                    </Link>
-                  )}
-
-                  <Link
-                    href="/dashboard"
-                    className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                      "transition-all duration-200 hover:bg-muted/50"
-                    )}
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                      color: "hsl(var(--foreground))",
-                    }}
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <LayoutDashboard className="h-4 w-4 opacity-80" />
-                      داشبورد
-                    </span>
-                  </Link>
-
-                  {typeof meId === "number" && (
-                    <Link
-                      href={`/u/${meId}`}
-                      className={cn(
-                        "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                        "transition-all duration-200 hover:bg-muted/50"
-                      )}
-                      style={{
-                        borderColor: "hsl(var(--border))",
-                        background: isDark
-                          ? "hsl(0 0% 10%)"
-                          : "hsl(var(--card))",
-                        color: "hsl(var(--foreground))",
-                      }}
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <span className="flex items-center gap-2">
-                        <UserRound className="h-4 w-4 opacity-80" />
-                        پنل کاربری
-                      </span>
-                    </Link>
-                  )}
-
-                  <button
-                    onClick={handleLogout}
-                    className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                      "transition-all duration-200 hover:bg-destructive/10"
-                    )}
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                      color: "hsl(var(--destructive-foreground))",
-                    }}
-                    disabled={loggingOut}
-                  >
-                    <span className="flex items-center gap-2">
-                      <LogOut className="h-4 w-4 opacity-90" />
-                      خروج
-                    </span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push("/login");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                      "transition-all duration-200 hover:bg-muted/50"
-                    )}
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                      color: "hsl(var(--foreground))",
-                    }}
-                  >
-                    ورود
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push("/register");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold",
-                      "transition-all duration-200 hover:bg-muted/50"
-                    )}
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      background: isDark ? "hsl(0 0% 10%)" : "hsl(var(--card))",
-                      color: "hsl(var(--foreground))",
-                    }}
-                  >
-                    ثبت‌نام
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
+                <span className="text-xs text-muted-foreground">
+                  {hasToken ? roleLabel(role) : "مهمان"}
+                </span>
+                <ThemeToggle />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
