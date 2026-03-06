@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import dayjs from "dayjs";
 import jalaliday from "jalaliday";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import { X, ImagePlus, Trash2, Loader2 } from "lucide-react";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { errorToText } from "@/lib/errorText";
 import { useTheme } from "next-themes";
+import { useAuthStore } from "@/store/auth.store";
 
 dayjs.extend(jalaliday);
 
@@ -34,11 +35,12 @@ export type AddAdPayload = {
   contactPhone: string;
   price: number | "";
   description: string;
+  imageUrls?: string[];
 };
 
+// ✅ فقط ۳ تب
 const tabs: { key: CarAdType; label: string }[] = [
   { key: "UsedSale", label: "فروش کارکرده" },
-  { key: "CoopSale", label: "فروش همکاری" },
   { key: "BuyRequest", label: "درخواست خرید" },
   { key: "ZeroSale", label: "فروش صفر" },
 ];
@@ -52,78 +54,57 @@ function hintYear() {
 function hintPrice() {
   return "مثلاً 80 یا 2500 یا 120.5";
 }
-
 function toFaNum(input: string) {
   return input;
 }
 
-/**
- * ورودی: عدد بر اساس «میلیون تومان»
- * خروجی: متن معادل با پشتیبانی از «میلیارد / میلیون / هزار تومان»
- * مثال:
- * 80 => ۸۰ میلیون تومان
- * 120.5 => ۱۲۰ میلیون و ۵۰۰ هزار تومان
- * 2000 => ۲ میلیارد تومان
- * 2500 => ۲ میلیارد و ۵۰۰ میلیون تومان
- * 2500.75 => ۲ میلیارد و ۵۰۰ میلیون و ۷۵۰ هزار تومان
- */
 function formatFromMillionInput(v: number): string {
   if (!Number.isFinite(v)) return "";
-
   const sign = v < 0 ? "-" : "";
   const abs = Math.abs(v);
-
   const billion = Math.floor(abs / 1000);
   const remAfterBillion = abs - billion * 1000;
-
   const million = Math.floor(remAfterBillion);
   const frac = remAfterBillion - million;
-
-  // 0.001 میلیون = 1000 تومان
   let thousand = Math.round(frac * 1000);
-
-  // رُند ممکنه هزار رو 1000 کنه => یک میلیون اضافه شود
   let millionAdj = million;
   let billionAdj = billion;
-
   if (thousand >= 1000) {
     thousand -= 1000;
     millionAdj += 1;
   }
   if (millionAdj >= 1000) {
-    // یک میلیارد اضافه شود
     const extraB = Math.floor(millionAdj / 1000);
     billionAdj += extraB;
     millionAdj = millionAdj - extraB * 1000;
   }
-
   const parts: string[] = [];
-
-  if (billionAdj > 0) {
+  if (billionAdj > 0)
     parts.push(`${billionAdj.toLocaleString("fa-IR")} میلیارد`);
-  }
-
-  if (millionAdj > 0) {
+  if (millionAdj > 0)
     parts.push(`${millionAdj.toLocaleString("fa-IR")} میلیون`);
-  }
-
-  if (thousand > 0) {
+  if (thousand > 0)
     parts.push(`${thousand.toLocaleString("fa-IR")} هزار تومان`);
-  }
-
   if (parts.length === 0) return "۰ تومان";
-
-  // اگر آخرین بخش «تومان» نداشت، یک «تومان» آخر اضافه کن
   const last = parts[parts.length - 1];
   const hasToman = last.includes("تومان");
   const joined = parts.join(" و ");
   return sign + (hasToman ? joined : `${joined} تومان`);
 }
 
-// ✅ فرم داخلی: priceText برای تایپ طبیعی اعشار
-type AddAdFormState = Omit<AddAdPayload, "price"> & {
+type ImageItem = {
+  id: string;
+  preview: string;
+  url: string | null;
+  uploading: boolean;
+  error: boolean;
+};
+
+type AddAdFormState = Omit<AddAdPayload, "price" | "imageUrls"> & {
   priceText: string;
 };
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 export default function AddAdModal({
   open,
@@ -131,17 +112,19 @@ export default function AddAdModal({
   onSubmit,
   initialValue,
   mode = "create",
+  token,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSubmit: (payload: AddAdPayload) => Promise<void> | void;
   initialValue?: AddAdPayload;
   mode?: "create" | "edit";
+  token?: string;
 }) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const empty: AddAdPayload = {
+  const empty: AddAdFormState = {
     type: "UsedSale",
     title: "",
     year: "",
@@ -151,17 +134,12 @@ export default function AddAdModal({
     gearbox: "",
     chassisNumber: "",
     contactPhone: "",
-    price: "",
     description: "",
-  };
-
-  const emptyForm: AddAdFormState = {
-    ...empty,
     priceText: "",
   };
 
   const [form, setForm] = useState<AddAdFormState>(() => {
-    if (!initialValue) return emptyForm;
+    if (!initialValue) return empty;
     return {
       ...initialValue,
       priceText:
@@ -169,14 +147,18 @@ export default function AddAdModal({
     };
   });
 
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const today = useMemo(() => todayJalali(), []);
 
+  // ✅ هر بار که modal باز می‌شود یا initialValue عوض می‌شود
   useEffect(() => {
     if (!open) return;
 
     if (!initialValue) {
-      setForm(emptyForm);
+      setForm(empty);
+      setImages([]);
       return;
     }
 
@@ -184,10 +166,27 @@ export default function AddAdModal({
       ...initialValue,
       priceText: initialValue.price === "" ? "" : String(initialValue.price),
     });
+
+    // ✅ بارگذاری تصاویر قبلی
+    if (initialValue.imageUrls && initialValue.imageUrls.length > 0) {
+      const existing: ImageItem[] = initialValue.imageUrls.map((url) => ({
+        id: crypto.randomUUID(),
+        preview: url.startsWith("http") ? url : `${API_BASE}${url}`,
+        url,
+        uploading: false,
+        error: false,
+      }));
+      setImages(existing);
+    } else {
+      setImages([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialValue]);
 
-  function set<K extends keyof AddAdFormState>(key: K, val: AddAdFormState[K]) {
+  function setF<K extends keyof AddAdFormState>(
+    key: K,
+    val: AddAdFormState[K]
+  ) {
     setForm((p) => ({ ...p, [key]: val }));
   }
 
@@ -197,16 +196,11 @@ export default function AddAdModal({
     return Number.isFinite(n) ? n : "";
   }
 
-  // ✅ فقط اعداد + یک نقطه + اعشار (برای اینکه 120. و 120.3 راحت تایپ بشه)
   function setPriceText(v: string) {
     const s = v.replace(/,/g, "").trim();
-
-    // اجازه: "" | "120" | "120." | "120.3"
-    if (s === "") return set("priceText", "");
-
+    if (s === "") return setF("priceText", "");
     if (!/^\d*\.?\d*$/.test(s)) return;
-
-    set("priceText", s);
+    setF("priceText", s);
   }
 
   function parsePrice(): number | "" {
@@ -217,6 +211,95 @@ export default function AddAdModal({
     return Number.isFinite(n) ? n : "";
   }
 
+  async function uploadFile(file: File, itemId: string) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const authToken = token ?? useAuthStore.getState().token;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/ads/upload-image`, {
+        method: "POST",
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "آپلود ناموفق");
+      }
+
+      const data = await res.json();
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === itemId
+            ? { ...img, url: data.url, uploading: false, error: false }
+            : img
+        )
+      );
+    } catch (err: any) {
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === itemId ? { ...img, uploading: false, error: true } : img
+        )
+      );
+      toast.error("آپلود تصویر ناموفق بود", {
+        description: err?.message ?? "دوباره تلاش کنید.",
+      });
+    }
+  }
+
+  async function handleFilesSelected(files: FileList | null) {
+    if (!files) return;
+
+    const remaining = 3 - images.length;
+    if (remaining <= 0) {
+      toast.error("حداکثر ۳ تصویر مجاز است.");
+      return;
+    }
+
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const validFiles = Array.from(files)
+      .filter((f) => {
+        if (!allowed.includes(f.type)) {
+          toast.error(`فرمت ${f.name} پشتیبانی نمی‌شود.`);
+          return false;
+        }
+        if (f.size > 5 * 1024 * 1024) {
+          toast.error(`${f.name} بزرگتر از ۵ مگابایت است.`);
+          return false;
+        }
+        return true;
+      })
+      .slice(0, remaining);
+
+    if (validFiles.length === 0) return;
+
+    const newItems: ImageItem[] = validFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      preview: URL.createObjectURL(file),
+      url: null,
+      uploading: true,
+      error: false,
+    }));
+
+    setImages((prev) => [...prev, ...newItems]);
+
+    await Promise.all(
+      validFiles.map((file, i) => uploadFile(file, newItems[i].id))
+    );
+  }
+
+  function removeImage(itemId: string) {
+    setImages((prev) => {
+      const item = prev.find((i) => i.id === itemId);
+      if (item?.preview.startsWith("blob:")) {
+        URL.revokeObjectURL(item.preview);
+      }
+      return prev.filter((i) => i.id !== itemId);
+    });
+  }
+
   function validate() {
     const missing: string[] = [];
     if (!form.title.trim()) missing.push("نام خودرو");
@@ -225,28 +308,24 @@ export default function AddAdModal({
     if (form.mileageKm === "") missing.push("کارکرد");
     if (!form.chassisNumber.trim()) missing.push("شماره شاسی");
     if (!form.contactPhone.trim()) missing.push("شماره تماس");
-
     if (!form.priceText.trim()) missing.push("قیمت");
-
     const p = parsePrice();
-    if (form.priceText.trim() && p === "") {
-      missing.push("قیمت معتبر");
-    }
-
-    if (form.contactPhone.trim() && form.contactPhone.trim().length < 10) {
+    if (form.priceText.trim() && p === "") missing.push("قیمت معتبر");
+    if (form.contactPhone.trim() && form.contactPhone.trim().length < 10)
       missing.push("شماره تماس معتبر");
-    }
-
+    if (images.some((i) => i.uploading))
+      missing.push("انتظار پایان آپلود تصاویر");
+    if (images.some((i) => i.error)) missing.push("رفع خطای آپلود تصاویر");
     return { ok: missing.length === 0, missing };
   }
 
   function showValidationToast(missing: string[]) {
-    const title = "فرم کامل نیست";
-    const desc =
-      missing.length <= 4
-        ? `لطفاً این موارد را تکمیل کنید: ${missing.join("، ")}`
-        : `چند مورد ناقص است. لطفاً فیلدهای ستاره‌دار (*) را کامل کنید.`;
-    toast.error(title, { description: desc });
+    toast.error("فرم کامل نیست", {
+      description:
+        missing.length <= 4
+          ? `لطفاً این موارد را تکمیل کنید: ${missing.join("، ")}`
+          : "چند مورد ناقص است. لطفاً فیلدهای ستاره‌دار (*) را کامل کنید.",
+    });
   }
 
   async function handleSubmit() {
@@ -266,15 +345,14 @@ export default function AddAdModal({
       contactPhone: form.contactPhone,
       price: price === "" ? 0 : price,
       description: form.description ?? "",
+      imageUrls: images.filter((i) => i.url).map((i) => i.url!),
     };
 
     setLoading(true);
     try {
       toast.loading(
         mode === "edit" ? "در حال ویرایش..." : "در حال ارسال فرم...",
-        {
-          id: "add-ad",
-        }
+        { id: "add-ad" }
       );
 
       await onSubmit(payload);
@@ -285,7 +363,8 @@ export default function AddAdModal({
       });
 
       onOpenChange(false);
-      setForm(emptyForm);
+      setForm(empty);
+      setImages([]);
     } catch (e: any) {
       toast.error(
         mode === "edit" ? "ویرایش آگهی ناموفق بود" : "ثبت آگهی ناموفق بود",
@@ -299,28 +378,31 @@ export default function AddAdModal({
     }
   }
 
-  // ✅ گرادیانت (دارک/لایت هماهنگ با هدر)
-  const softGradient = useMemo(() => {
-    return isDark
-      ? "linear-gradient(90deg, rgba(34,197,94,.62), rgba(56,189,248,.54), rgba(217,70,239,.52))"
-      : "linear-gradient(90deg, rgba(34,197,94,.80), rgba(56,189,248,.72), rgba(217,70,239,.66))";
-  }, [isDark]);
-
-  const surfaceBg = useMemo(() => {
-    return isDark
-      ? "linear-gradient(180deg, hsl(0 0% 8%) 0%, hsl(0 0% 10%) 100%)"
-      : "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--card)) 100%)";
-  }, [isDark]);
-
-  const stickyBg = useMemo(() => {
-    return isDark
-      ? "linear-gradient(180deg, hsl(0 0% 8%) 0%, hsl(0 0% 10%) 100%)"
-      : "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--card)) 100%)";
-  }, [isDark]);
-
-  const inactiveBtnBg = useMemo(() => {
-    return isDark ? "hsl(0 0% 10%)" : "hsl(var(--background))";
-  }, [isDark]);
+  const softGradient = useMemo(
+    () =>
+      isDark
+        ? "linear-gradient(90deg, rgba(34,197,94,.62), rgba(56,189,248,.54), rgba(217,70,239,.52))"
+        : "linear-gradient(90deg, rgba(34,197,94,.80), rgba(56,189,248,.72), rgba(217,70,239,.66))",
+    [isDark]
+  );
+  const surfaceBg = useMemo(
+    () =>
+      isDark
+        ? "linear-gradient(180deg, hsl(0 0% 8%) 0%, hsl(0 0% 10%) 100%)"
+        : "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--card)) 100%)",
+    [isDark]
+  );
+  const stickyBg = useMemo(
+    () =>
+      isDark
+        ? "linear-gradient(180deg, hsl(0 0% 8%) 0%, hsl(0 0% 10%) 100%)"
+        : "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--card)) 100%)",
+    [isDark]
+  );
+  const inactiveBtnBg = useMemo(
+    () => (isDark ? "hsl(0 0% 10%)" : "hsl(var(--background))"),
+    [isDark]
+  );
 
   const roleBtnBase =
     "h-11 w-full rounded-2xl border text-sm font-semibold " +
@@ -329,17 +411,18 @@ export default function AddAdModal({
 
   const priceHuman = useMemo(() => {
     const t = (form.priceText ?? "").trim();
-    if (!t) return "";
-    if (t.endsWith(".")) return "";
+    if (!t || t.endsWith(".")) return "";
     const n = Number(t);
     if (!Number.isFinite(n)) return "";
     return formatFromMillionInput(n);
   }, [form.priceText]);
 
-  // ✅ Toggle برای گیربکس
   function toggleGearbox(next: GearboxType) {
-    set("gearbox", form.gearbox === next ? "" : next);
+    setF("gearbox", form.gearbox === next ? "" : next);
   }
+
+  const canAddMore = images.length < 3;
+  const hasUploading = images.some((i) => i.uploading);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -359,6 +442,7 @@ export default function AddAdModal({
 
         <div className="h-1.5 w-full" style={{ background: softGradient }} />
 
+        {/* ─── Header ─── */}
         <div
           className="sticky top-0 z-30"
           style={{
@@ -369,7 +453,6 @@ export default function AddAdModal({
           <div className="px-4 sm:px-6 pt-4 pb-3">
             <div className="flex items-center justify-between gap-3">
               <div className="w-10" />
-
               <div className="flex-1 flex justify-center">
                 <div
                   className="px-4 py-2 rounded-2xl border text-sm font-semibold"
@@ -382,7 +465,6 @@ export default function AddAdModal({
                   امروز • {today}
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
@@ -399,14 +481,15 @@ export default function AddAdModal({
               </button>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            {/* ✅ ۳ تب وسط‌چین */}
+            <div className="mt-4 flex gap-2 justify-center">
               {tabs.map((t) => {
                 const active = form.type === t.key;
                 return (
                   <button
                     key={t.key}
                     type="button"
-                    onClick={() => set("type", t.key)}
+                    onClick={() => setF("type", t.key)}
                     className={cn(
                       "px-4 py-2 rounded-2xl border text-sm font-semibold cursor-pointer select-none",
                       "transition-all hover:-translate-y-[1px] hover:shadow-sm"
@@ -437,6 +520,7 @@ export default function AddAdModal({
           </div>
         </div>
 
+        {/* ─── Body ─── */}
         <div className="px-4 sm:px-6 py-5 max-h-[78vh] overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -447,7 +531,7 @@ export default function AddAdModal({
             <Field label="نام خودرو *">
               <Input
                 value={form.title}
-                onChange={(e) => set("title", e.target.value)}
+                onChange={(e) => setF("title", e.target.value)}
                 placeholder="مثلاً: Sonata 2018 | 206 تیپ 2"
                 className="rounded-2xl h-12"
               />
@@ -456,7 +540,7 @@ export default function AddAdModal({
             <Field label="سال ساخت *">
               <Input
                 value={form.year === "" ? "" : String(form.year)}
-                onChange={(e) => set("year", numberOrEmpty(e.target.value))}
+                onChange={(e) => setF("year", numberOrEmpty(e.target.value))}
                 placeholder={hintYear()}
                 inputMode="numeric"
                 className="rounded-2xl h-12"
@@ -466,7 +550,7 @@ export default function AddAdModal({
             <Field label="رنگ *">
               <Input
                 value={form.color}
-                onChange={(e) => set("color", e.target.value)}
+                onChange={(e) => setF("color", e.target.value)}
                 placeholder="مثلاً سفید"
                 className="rounded-2xl h-12"
               />
@@ -476,7 +560,7 @@ export default function AddAdModal({
               <Input
                 value={form.mileageKm === "" ? "" : String(form.mileageKm)}
                 onChange={(e) =>
-                  set("mileageKm", numberOrEmpty(e.target.value))
+                  setF("mileageKm", numberOrEmpty(e.target.value))
                 }
                 placeholder="مثلاً 45000"
                 inputMode="numeric"
@@ -492,7 +576,7 @@ export default function AddAdModal({
                     : String(form.insuranceMonths)
                 }
                 onChange={(e) =>
-                  set("insuranceMonths", numberOrEmpty(e.target.value))
+                  setF("insuranceMonths", numberOrEmpty(e.target.value))
                 }
                 placeholder="مثلاً 6"
                 inputMode="numeric"
@@ -500,72 +584,48 @@ export default function AddAdModal({
               />
             </Field>
 
-            {/* ✅ گیربکس: فقط ۲ دکمه + toggle (خاموش = هیچکدام) */}
             <Field label="گیربکس">
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => toggleGearbox("Automatic")}
-                  className={cn(roleBtnBase)}
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    background:
-                      form.gearbox === "Automatic"
-                        ? softGradient
-                        : inactiveBtnBg,
-                    color: "hsl(var(--foreground))",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (form.gearbox !== "Automatic")
-                      (e.currentTarget as HTMLButtonElement).style.background =
-                        softGradient;
-                  }}
-                  onMouseLeave={(e) => {
-                    if (form.gearbox !== "Automatic")
-                      (e.currentTarget as HTMLButtonElement).style.background =
-                        inactiveBtnBg;
-                  }}
-                >
-                  اتومات
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleGearbox("Manual")}
-                  className={cn(roleBtnBase)}
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    background:
-                      form.gearbox === "Manual" ? softGradient : inactiveBtnBg,
-                    color: "hsl(var(--foreground))",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (form.gearbox !== "Manual")
-                      (e.currentTarget as HTMLButtonElement).style.background =
-                        softGradient;
-                  }}
-                  onMouseLeave={(e) => {
-                    if (form.gearbox !== "Manual")
-                      (e.currentTarget as HTMLButtonElement).style.background =
-                        inactiveBtnBg;
-                  }}
-                >
-                  دنده‌ای
-                </button>
+                {(["Automatic", "Manual"] as GearboxType[]).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => toggleGearbox(g)}
+                    className={cn(roleBtnBase)}
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      background:
+                        form.gearbox === g ? softGradient : inactiveBtnBg,
+                      color: "hsl(var(--foreground))",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (form.gearbox !== g)
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.background = softGradient;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (form.gearbox !== g)
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.background = inactiveBtnBg;
+                    }}
+                  >
+                    {g === "Automatic" ? "اتومات" : "دنده‌ای"}
+                  </button>
+                ))}
               </div>
-
-              {/* نمایش حالت هیچکدام */}
-              {form.gearbox === "" ? (
+              {form.gearbox === "" && (
                 <div className="mt-2 text-xs text-muted-foreground text-right">
                   حالت فعلی: هیچکدام
                 </div>
-              ) : null}
+              )}
             </Field>
 
             <Field label="شماره تماس *">
               <Input
                 value={form.contactPhone}
-                onChange={(e) => set("contactPhone", e.target.value)}
+                onChange={(e) => setF("contactPhone", e.target.value)}
                 placeholder="مثلاً 09123456789"
                 className="rounded-2xl h-12"
               />
@@ -574,13 +634,12 @@ export default function AddAdModal({
             <Field label="شماره شاسی *">
               <Input
                 value={form.chassisNumber}
-                onChange={(e) => set("chassisNumber", e.target.value)}
+                onChange={(e) => setF("chassisNumber", e.target.value)}
                 placeholder="مثلاً IR-CHS-12345"
                 className="rounded-2xl h-12"
               />
             </Field>
 
-            {/* ✅ قیمت: تایپ اعشار آزاد + معادل میلیارد/میلیون/هزار */}
             <Field label="قیمت (بر اساس میلیون تومان) *">
               <Input
                 value={form.priceText}
@@ -589,8 +648,7 @@ export default function AddAdModal({
                 inputMode="decimal"
                 className="rounded-2xl h-12"
               />
-
-              {priceHuman ? (
+              {priceHuman && (
                 <div
                   className="mt-2 rounded-2xl border px-4 py-2 text-sm font-semibold text-right"
                   style={{
@@ -603,13 +661,168 @@ export default function AddAdModal({
                 >
                   {toFaNum(priceHuman)}
                 </div>
-              ) : null}
+              )}
+            </Field>
+
+            {/* ─── Image Uploader ─── */}
+            <Field label="تصاویر (حداکثر ۳ عکس)">
+              {canAddMore && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "w-full rounded-2xl border-2 border-dashed h-24",
+                    "flex flex-col items-center justify-center gap-2",
+                    "cursor-pointer transition-all duration-200",
+                    "hover:-translate-y-[1px] hover:shadow-md"
+                  )}
+                  style={{
+                    borderColor: "hsl(var(--border))",
+                    background: isDark
+                      ? "hsl(0 0% 10%)"
+                      : "hsl(var(--background))",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background =
+                      isDark ? "hsl(0 0% 13%)" : "hsl(var(--accent))";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background =
+                      isDark ? "hsl(0 0% 10%)" : "hsl(var(--background))";
+                  }}
+                >
+                  <ImagePlus className="h-6 w-6 opacity-60" />
+                  <span className="text-sm font-medium">
+                    {images.length === 0
+                      ? "انتخاب تصویر"
+                      : `افزودن تصویر (${images.length}/۳)`}
+                  </span>
+                  <span className="text-xs opacity-50">
+                    JPG، PNG، WEBP — حداکثر ۵ مگابایت
+                  </span>
+                </button>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFilesSelected(e.target.files)}
+                onClick={(e) => {
+                  (e.target as HTMLInputElement).value = "";
+                }}
+              />
+
+              <AnimatePresence initial={false}>
+                {images.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="grid grid-cols-3 gap-3 mt-3"
+                  >
+                    {images.map((img) => (
+                      <motion.div
+                        key={img.id}
+                        initial={{ opacity: 0, scale: 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.85 }}
+                        transition={{ duration: 0.2 }}
+                        className="relative aspect-square rounded-2xl overflow-hidden border"
+                        style={{ borderColor: "hsl(var(--border))" }}
+                      >
+                        <img
+                          src={img.preview}
+                          alt="پیش‌نمایش"
+                          className={cn(
+                            "w-full h-full object-cover transition-all duration-300",
+                            img.uploading && "opacity-50 blur-[1px]",
+                            img.error && "opacity-40 grayscale"
+                          )}
+                        />
+
+                        {img.uploading && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div
+                              className="rounded-full p-1.5"
+                              style={{
+                                background: isDark
+                                  ? "rgba(0,0,0,.55)"
+                                  : "rgba(255,255,255,.75)",
+                              }}
+                            >
+                              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                            </div>
+                          </div>
+                        )}
+
+                        {img.error && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                            <span className="text-destructive text-xs font-semibold bg-background/80 px-2 py-0.5 rounded-xl">
+                              خطا
+                            </span>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img.id)}
+                          className={cn(
+                            "absolute top-1.5 left-1.5 h-7 w-7 rounded-xl",
+                            "flex items-center justify-center",
+                            "transition-all duration-150 hover:scale-110 cursor-pointer"
+                          )}
+                          style={{
+                            background: isDark
+                              ? "rgba(0,0,0,.65)"
+                              : "rgba(255,255,255,.85)",
+                            border: "1px solid hsl(var(--border))",
+                          }}
+                          aria-label="حذف تصویر"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </button>
+
+                        {!img.uploading && !img.error && img.url && (
+                          <div
+                            className="absolute bottom-1.5 left-1.5 h-5 w-5 rounded-full flex items-center justify-center"
+                            style={{ background: "rgba(34,197,94,.9)" }}
+                          >
+                            <svg
+                              viewBox="0 0 10 10"
+                              className="h-3 w-3 fill-white"
+                            >
+                              <path
+                                d="M1.5 5l2.5 2.5L8.5 2.5"
+                                stroke="white"
+                                strokeWidth="1.5"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {images.length === 3 && (
+                <p className="text-xs text-muted-foreground text-right mt-2">
+                  حداکثر ۳ تصویر انتخاب شده است.
+                </p>
+              )}
             </Field>
 
             <Field label="توضیحات (وضعیت بدنه، رنگ‌شدگی، لاستیک‌ها و...)">
               <Textarea
                 value={form.description}
-                onChange={(e) => set("description", e.target.value)}
+                onChange={(e) => setF("description", e.target.value)}
                 placeholder="دلخواه"
                 className="rounded-2xl min-h-[120px]"
               />
@@ -617,7 +830,7 @@ export default function AddAdModal({
 
             <Button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || hasUploading}
               className="w-full rounded-2xl h-12 font-semibold cursor-pointer transition hover:-translate-y-[1px] hover:shadow-md"
               style={{
                 border: "1px solid hsl(var(--border))",
@@ -625,7 +838,9 @@ export default function AddAdModal({
                 color: "hsl(var(--foreground))",
               }}
             >
-              {loading
+              {hasUploading
+                ? "در حال آپلود تصاویر..."
+                : loading
                 ? "در حال ارسال..."
                 : mode === "edit"
                 ? "ذخیره تغییرات"

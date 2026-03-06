@@ -55,6 +55,7 @@ type Ad = {
   contactPhone?: string;
   description?: string;
   viewCount: number;
+  images?: string[]; // ✅ این خط اضافه شد
 };
 
 // ─────────────────────────────────────────────
@@ -810,6 +811,7 @@ export default function DashboardPage() {
       contactPhone: payload.contactPhone,
       price: payload.price === "" ? 0 : payload.price,
       description: payload.description ?? "",
+      imageUrls: payload.imageUrls ?? [], // ✅ اضافه شد
     };
 
     if (editingAdId) {
@@ -842,6 +844,7 @@ export default function DashboardPage() {
       contactPhone: ad.contactPhone ?? "",
       price: ad.price ?? "",
       description: ad.description ?? "",
+      imageUrls: ad.images ?? [], // ✅ این خط اضافه شد
     });
     setAddOpen(true);
   }
@@ -892,6 +895,7 @@ export default function DashboardPage() {
         onSubmit={handleAddOrUpdate}
         initialValue={editInitial ?? undefined}
         mode={editingAdId ? "edit" : "create"}
+        token={token ?? undefined} // ✅ این خط اضافه شد
       />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
